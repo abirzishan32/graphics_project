@@ -8,6 +8,7 @@
 #include "shader.h"
 #include "basic_camera.h"
 #include "car_generator.h"
+#include "human_generator.h"
 
 #include <iostream>
 #include <vector>
@@ -33,6 +34,7 @@ void drawQuad(Shader& shader, unsigned int VAO, glm::mat4 model,
 void setupLighting(Shader& shader);
 void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO);
 void drawRealisticCar(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, unsigned int wedgeVAO, glm::vec3 position, glm::vec3 carColor, float rotation);
+void drawAttendantBooth(Shader& shader, unsigned int cubeVAO, glm::vec3 position);
 void drawTree(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, glm::vec3 position, float height, float spread);
 void drawOutdoorEnvironment(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO);
 void drawLightRays(Shader& shader, unsigned int cubeVAO);
@@ -49,8 +51,8 @@ const unsigned int SCR_WIDTH = 1400;
 const unsigned int SCR_HEIGHT = 900;
 
 // Parking lot dimensions (meters)
-const float LOT_WIDTH = 60.0f;
-const float LOT_DEPTH = 40.0f;
+const float LOT_WIDTH = 80.0f;
+const float LOT_DEPTH = 60.0f;
 const float CEILING_HEIGHT = 3.5f;
 const float WALL_THICKNESS = 0.3f;
 const float PILLAR_SIZE = 0.5f;
@@ -637,7 +639,7 @@ void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, 
     float lineHeight = 0.01f;
     // Left row of spots
     float spotStartX = 2.0f;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 10; i++) {
         float z = 4.0f + i * (SPOT_DEPTH + 0.5f);
         // Perpendicular lines
         drawCube(shader, cubeVAO, glm::vec3(spotStartX, lineHeight, z),
@@ -653,7 +655,7 @@ void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, 
     
     // Right row of spots
     float spotStartX2 = LOT_WIDTH - 2.0f;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 10; i++) {
         float z = 4.0f + i * (SPOT_DEPTH + 0.5f);
         drawCube(shader, cubeVAO, glm::vec3(spotStartX2, lineHeight, z),
                  glm::vec3(SPOT_WIDTH, lineThickness, 0.15f), lineColor, 1, 0.3f, 0.8f, 0.3f, 16.0f);
@@ -667,7 +669,7 @@ void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, 
     
     // Middle double row
     float middleX = LOT_WIDTH/2;
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 8; i++) {
         float z = 6.0f + i * (SPOT_DEPTH + 0.5f);
         // Left side spots
         float leftX = middleX - SPOT_WIDTH/2 - 0.5f;
@@ -724,10 +726,10 @@ void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, 
              glm::vec3(0.35f, 0.25f, 0.02f), glm::vec3(0.1f, 0.4f, 0.5f), 4, 0.5f, 0.4f, 0.9f, 64.0f);
     
     // === CEILING LIGHT FIXTURES ===
-    for (int i = 0; i < 4; i++) {
-        for (int j = 0; j < 3; j++) {
-            float x = (LOT_WIDTH/4) * (i + 0.5f);
-            float z = (LOT_DEPTH/3) * (j + 0.5f);
+    for (int i = 0; i < 5; i++) {
+        for (int j = 0; j < 4; j++) {
+            float x = (LOT_WIDTH/5) * (i + 0.5f);
+            float z = (LOT_DEPTH/4) * (j + 0.5f);
             // Light housing
             drawCube(shader, cubeVAO, glm::vec3(x, CEILING_HEIGHT - 0.15f, z),
                      glm::vec3(1.2f, 0.1f, 0.4f), glm::vec3(0.8f, 0.8f, 0.82f), 3, 0.2f, 0.6f, 0.7f, 48.0f);
@@ -768,6 +770,9 @@ void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, 
     // Exit sign above entrance
     drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH/2, 2.8f, LOT_DEPTH - 0.5f),
              glm::vec3(1.5f, 0.4f, 0.1f), glm::vec3(0.1f, 0.6f, 0.2f), 1, 0.6f, 0.5f, 0.3f, 16.0f);
+             
+    // Attendant Booth (New Feature)
+    drawAttendantBooth(shader, cubeVAO, glm::vec3(LOT_WIDTH/2 - 5.0f, 0.0f, LOT_DEPTH - 3.0f));
 }
 
 // Draw a realistic car using the procedural generator
@@ -779,6 +784,69 @@ void drawRealisticCar(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO,
     
     // Render the high-fidelity car
     sedan.render(shader, position, rotation, carColor);
+}
+
+// Draw the parking lot attendant booth with realistic human inside
+void drawAttendantBooth(Shader& shader, unsigned int cubeVAO, glm::vec3 position) {
+    // === BOOTH STRUCTURE ===
+    float boothWidth = 2.0f;
+    float boothHeight = 2.5f;
+    float boothDepth = 2.0f;
+    glm::vec3 wallColor(0.8f, 0.85f, 0.9f); // Light blueish white
+    glm::vec3 glassColor(0.1f, 0.2f, 0.3f);
+    glm::vec3 metalColor(0.3f, 0.3f, 0.35f);
+    
+    // Floor
+    drawCube(shader, cubeVAO, position + glm::vec3(0, 0.1f, 0), glm::vec3(boothWidth, 0.2f, boothDepth), 
+             glm::vec3(0.4f, 0.4f, 0.45f), 1, 0.3f, 0.6f, 0.4f, 16.0f);
+             
+    // Roof
+    drawCube(shader, cubeVAO, position + glm::vec3(0, boothHeight, 0), glm::vec3(boothWidth+0.4f, 0.2f, boothDepth+0.4f), 
+             glm::vec3(0.2f, 0.25f, 0.3f), 1, 0.3f, 0.6f, 0.4f, 16.0f);
+             
+    // Pillars (Corners)
+    float pSize = 0.2f;
+    drawCube(shader, cubeVAO, position + glm::vec3(-boothWidth/2+pSize/2, boothHeight/2, -boothDepth/2+pSize/2), 
+             glm::vec3(pSize, boothHeight, pSize), metalColor, 3, 0.2f, 0.6f, 0.5f, 32.0f);
+    drawCube(shader, cubeVAO, position + glm::vec3(boothWidth/2-pSize/2, boothHeight/2, -boothDepth/2+pSize/2), 
+             glm::vec3(pSize, boothHeight, pSize), metalColor, 3, 0.2f, 0.6f, 0.5f, 32.0f);
+    drawCube(shader, cubeVAO, position + glm::vec3(-boothWidth/2+pSize/2, boothHeight/2, boothDepth/2-pSize/2), 
+             glm::vec3(pSize, boothHeight, pSize), metalColor, 3, 0.2f, 0.6f, 0.5f, 32.0f);
+    drawCube(shader, cubeVAO, position + glm::vec3(boothWidth/2-pSize/2, boothHeight/2, boothDepth/2-pSize/2), 
+             glm::vec3(pSize, boothHeight, pSize), metalColor, 3, 0.2f, 0.6f, 0.5f, 32.0f);
+             
+    // Walls (Lower half opaque)
+    float lowWallH = 1.0f;
+    drawCube(shader, cubeVAO, position + glm::vec3(0, lowWallH/2, -boothDepth/2+0.05f), 
+             glm::vec3(boothWidth-0.1f, lowWallH, 0.1f), wallColor, 2, 0.3f, 0.7f, 0.2f, 8.0f); // Back
+    drawCube(shader, cubeVAO, position + glm::vec3(-boothWidth/2+0.05f, lowWallH/2, 0), 
+             glm::vec3(0.1f, lowWallH, boothDepth-0.1f), wallColor, 2, 0.3f, 0.7f, 0.2f, 8.0f); // Left
+    drawCube(shader, cubeVAO, position + glm::vec3(boothWidth/2-0.05f, lowWallH/2, 0), 
+             glm::vec3(0.1f, lowWallH, boothDepth-0.1f), wallColor, 2, 0.3f, 0.7f, 0.2f, 8.0f); // Right
+    drawCube(shader, cubeVAO, position + glm::vec3(0, lowWallH/2, boothDepth/2-0.05f), 
+             glm::vec3(boothWidth-0.1f, lowWallH, 0.1f), wallColor, 2, 0.3f, 0.7f, 0.2f, 8.0f); // Front
+             
+    // Windows (Upper half glass)
+    float winH = boothHeight - lowWallH - 0.2f;
+    float winY = lowWallH + winH/2;
+    // Front Window
+    drawCube(shader, cubeVAO, position + glm::vec3(0, winY, boothDepth/2-0.05f), 
+             glm::vec3(boothWidth-0.4f, winH, 0.05f), glassColor, 4, 0.1f, 0.3f, 0.9f, 64.0f);
+    // Side Windows
+    drawCube(shader, cubeVAO, position + glm::vec3(-boothWidth/2+0.05f, winY, 0), 
+             glm::vec3(0.05f, winH, boothDepth-0.4f), glassColor, 4, 0.1f, 0.3f, 0.9f, 64.0f);
+    drawCube(shader, cubeVAO, position + glm::vec3(boothWidth/2-0.05f, winY, 0), 
+             glm::vec3(0.05f, winH, boothDepth-0.4f), glassColor, 4, 0.1f, 0.3f, 0.9f, 64.0f);
+             
+    // Desk inside
+    drawCube(shader, cubeVAO, position + glm::vec3(0, 0.9f, 0.4f), 
+             glm::vec3(1.8f, 0.05f, 0.6f), glm::vec3(0.4f, 0.25f, 0.15f), 1, 0.2f, 0.6f, 0.3f, 16.0f);
+             
+    // === HUMAN ATTENDANT ===
+    static ProceduralHuman attendant;
+    // Sitting position: behind desk, slightly elevated chair
+    glm::vec3 humanPos = position + glm::vec3(0, 1.4f, -0.2f);
+    attendant.render(shader, humanPos, 180.0f); // Facing front (toward +Z presumably if entrance is there? No, usually looks nicely)
 }
 
 // Draw a hyper-realistic tree with branching trunk and organic foliage clusters

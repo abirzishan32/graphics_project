@@ -1,0 +1,395 @@
+#ifndef HUMAN_GENERATOR_H
+#define HUMAN_GENERATOR_H
+
+#include <glad/glad.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <vector>
+#include <cmath>
+#include "shader.h"
+
+// ============================================================
+// REALISTIC HUMAN GENERATOR
+// Detail level: High (Fingers, Face Features, Hair, Clothing)
+// ============================================================
+
+class ProceduralHuman {
+public:
+    unsigned int headVAO, headVBO;
+    unsigned int bodyVAO, bodyVBO;
+    unsigned int armVAO, armVBO;
+    unsigned int legVAO, legVBO;
+    
+    int headVertexCount;
+    int bodyVertexCount;
+    int armVertexCount;
+    int legVertexCount;
+    
+    // Skin color (Realistic Caucasian/Asian/Dark skin tone blended)
+    glm::vec3 skinColor = glm::vec3(0.85f, 0.65f, 0.55f);
+    glm::vec3 hairColor = glm::vec3(0.1f, 0.08f, 0.05f); // Dark brown
+    glm::vec3 shirtColor = glm::vec3(0.9f, 0.1f, 0.1f); // Red shirt
+    glm::vec3 pantColor = glm::vec3(0.1f, 0.1f, 0.3f);  // Dark blue pants
+    
+    ProceduralHuman() {
+        generateGeometry();
+    }
+    
+    ~ProceduralHuman() {
+        glDeleteVertexArrays(1, &headVAO);
+        glDeleteBuffers(1, &headVBO);
+        glDeleteVertexArrays(1, &bodyVAO);
+        glDeleteBuffers(1, &bodyVBO);
+        glDeleteVertexArrays(1, &armVAO);
+        glDeleteBuffers(1, &armVBO);
+        glDeleteVertexArrays(1, &legVAO);
+        glDeleteBuffers(1, &legVBO);
+    }
+    
+    void generateGeometry() {
+        std::vector<float> headVerts;
+        std::vector<float> bodyVerts;
+        std::vector<float> armVerts;
+        std::vector<float> legVerts;
+        
+        generateHead(headVerts);
+        generateBody(bodyVerts);
+        generateArms(armVerts);
+        generateLegs(legVerts);
+        
+        headVAO = createVAO(headVerts);
+        headVertexCount = headVerts.size() / 8;
+        
+        bodyVAO = createVAO(bodyVerts);
+        bodyVertexCount = bodyVerts.size() / 8;
+        
+        armVAO = createVAO(armVerts);
+        armVertexCount = armVerts.size() / 8;
+        
+        legVAO = createVAO(legVerts);
+        legVertexCount = legVerts.size() / 8;
+    }
+    
+    // ============================================================
+    // GEOMETRY GENERATORS
+    // ============================================================
+    
+    void generateHead(std::vector<float>& vertices) {
+        // Main skull (slightly elongated sphere)
+        addSphere(vertices, glm::vec3(0.0f, 0.0f, 0.0f), 0.12f, skinColor);
+        
+        // Jaw/Chin (added volume at bottom)
+        addBox(vertices, glm::vec3(0.0f, -0.1f, 0.02f), glm::vec3(0.14f, 0.1f, 0.15f), skinColor);
+        
+        // Nose (Pyramid-ish shape)
+        addBox(vertices, glm::vec3(0.0f, -0.02f, 0.12f), glm::vec3(0.04f, 0.06f, 0.04f), skinColor * 0.95f);
+        
+        // Eyes (Small spheres)
+        glm::vec3 white(0.95f, 0.95f, 0.95f);
+        glm::vec3 pupil(0.1f, 0.2f, 0.1f);
+        // Left Eye
+        addSphere(vertices, glm::vec3(-0.04f, 0.02f, 0.105f), 0.025f, white);
+        addSphere(vertices, glm::vec3(-0.04f, 0.02f, 0.125f), 0.01f, pupil);
+        // Right Eye
+        addSphere(vertices, glm::vec3(0.04f, 0.02f, 0.105f), 0.025f, white);
+        addSphere(vertices, glm::vec3(0.04f, 0.02f, 0.125f), 0.01f, pupil);
+        
+        // Ears (Flattened spheres on sides)
+        addSphere(vertices, glm::vec3(-0.12f, 0.0f, 0.0f), 0.035f, skinColor); // Left
+        addSphere(vertices, glm::vec3(0.12f, 0.0f, 0.0f), 0.035f, skinColor);  // Right
+        
+        // Hair (Volume on top and back)
+        // Top
+        addSphere(vertices, glm::vec3(0.0f, 0.08f, -0.02f), 0.13f, hairColor);
+        // Sideburns / Back
+        addBox(vertices, glm::vec3(0.0f, 0.0f, -0.08f), glm::vec3(0.25f, 0.25f, 0.1f), hairColor);
+    }
+    
+    void generateBody(std::vector<float>& vertices) {
+        // Torso (Red Shirt)
+        // Main block
+        addBox(vertices, glm::vec3(0.0f, -0.35f, 0.0f), glm::vec3(0.4f, 0.55f, 0.25f), shirtColor);
+        
+        // Neck (Skin)
+        addCylinder(vertices, glm::vec3(0.0f, -0.1f, 0.0f), 0.06f, 0.1f, skinColor);
+        
+        // Collar (Shirt)
+        addCylinder(vertices, glm::vec3(0.0f, -0.12f, 0.0f), 0.07f, 0.02f, shirtColor * 0.9f);
+    }
+    
+    void generateArms(std::vector<float>& vertices) {
+        // Left Arm (Shirt sleeve + Skin arm)
+        // Sleeve
+        addCylinderRotated(vertices, glm::vec3(-0.25f, -0.15f, 0.0f), 0.07f, 0.15f, glm::vec3(0, 0, 45), shirtColor);
+        // Forearm (Skin) - bent forward slightly
+        addCylinderRotated(vertices, glm::vec3(-0.35f, -0.3f, 0.1f), 0.05f, 0.35f, glm::vec3(30, 0, 20), skinColor);
+        // Left Hand
+        glm::vec3 handPosL(-0.35f, -0.45f, 0.25f);
+        addBox(vertices, handPosL, glm::vec3(0.08f, 0.1f, 0.03f), skinColor); // Palm
+        // Fingers L
+        for(int i=0; i<5; i++) {
+           addCylinderRotated(vertices, handPosL + glm::vec3(-0.03f + i*0.015f, -0.06f, 0.0f), 0.006f, 0.06f, glm::vec3(10, 0, 0), skinColor);
+        }
+        
+        // Right Arm
+        // Sleeve
+        addCylinderRotated(vertices, glm::vec3(0.25f, -0.15f, 0.0f), 0.07f, 0.15f, glm::vec3(0, 0, -45), shirtColor);
+        // Forearm (Skin)
+        addCylinderRotated(vertices, glm::vec3(0.35f, -0.3f, 0.1f), 0.05f, 0.35f, glm::vec3(30, 0, -20), skinColor);
+        // Right Hand
+        glm::vec3 handPosR(0.35f, -0.45f, 0.25f);
+        addBox(vertices, handPosR, glm::vec3(0.08f, 0.1f, 0.03f), skinColor); // Palm
+        // Fingers R
+        for(int i=0; i<5; i++) {
+           addCylinderRotated(vertices, handPosR + glm::vec3(-0.03f + i*0.015f, -0.06f, 0.0f), 0.006f, 0.06f, glm::vec3(10, 0, 0), skinColor);
+        }
+    }
+    
+    void generateLegs(std::vector<float>& vertices) {
+        // Sitting pose
+        
+        // Thighs (Horizontal)
+        // Left
+        addCylinderRotated(vertices, glm::vec3(-0.12f, -0.65f, 0.2f), 0.08f, 0.5f, glm::vec3(90, 0, 0), pantColor);
+        // Right
+        addCylinderRotated(vertices, glm::vec3(0.12f, -0.65f, 0.2f), 0.08f, 0.5f, glm::vec3(90, 0, 0), pantColor);
+        
+        // Lower legs (Vertical down)
+        // Left
+        addCylinder(vertices, glm::vec3(-0.12f, -0.9f, 0.45f), 0.07f, 0.45f, pantColor);
+        // Right
+        addCylinder(vertices, glm::vec3(0.12f, -0.9f, 0.45f), 0.07f, 0.45f, pantColor);
+        
+        // Shoes (Black)
+        glm::vec3 shoeColor(0.05f, 0.05f, 0.05f);
+        addBox(vertices, glm::vec3(-0.12f, -1.13f, 0.5f), glm::vec3(0.1f, 0.08f, 0.2f), shoeColor);
+        addBox(vertices, glm::vec3(0.12f, -1.13f, 0.5f), glm::vec3(0.1f, 0.08f, 0.2f), shoeColor);
+    }
+
+    // ============================================================
+    // PRIMITIVE GENERATORS
+    // ============================================================
+    
+    void addSphere(std::vector<float>& verts, glm::vec3 center, float radius, glm::vec3 color) {
+        int stacks = 12;
+        int sectors = 12;
+        
+        for(int i = 0; i < stacks; ++i) {
+            float lat0 = 3.14159f * (-0.5f + (float)(i) / stacks);
+            float z0  = sin(lat0);
+            float zr0 =  cos(lat0);
+            
+            float lat1 = 3.14159f * (-0.5f + (float)(i+1) / stacks);
+            float z1 = sin(lat1);
+            float zr1 = cos(lat1);
+            
+            for(int j = 0; j < sectors; ++j) {
+                float lng0 = 2 * 3.14159f * (float)(j - 1) / sectors;
+                float x0 = cos(lng0);
+                float y0 = sin(lng0);
+                
+                float lng1 = 2 * 3.14159f * (float)(j) / sectors;
+                float x1 = cos(lng1);
+                float y1 = sin(lng1);
+                
+                glm::vec3 v0(x0 * zr0, y0 * zr0, z0);
+                glm::vec3 v1(x0 * zr1, y0 * zr1, z1);
+                glm::vec3 v2(x1 * zr0, y1 * zr0, z0);
+                glm::vec3 v3(x1 * zr1, y1 * zr1, z1);
+                
+                // Add quads as 2 triangles
+                addVertex(verts, center + v0 * radius, v0, color);
+                addVertex(verts, center + v1 * radius, v1, color);
+                addVertex(verts, center + v2 * radius, v2, color);
+                
+                addVertex(verts, center + v1 * radius, v1, color);
+                addVertex(verts, center + v3 * radius, v3, color);
+                addVertex(verts, center + v2 * radius, v2, color);
+            }
+        }
+    }
+    
+    void addBox(std::vector<float>& verts, glm::vec3 center, glm::vec3 size, glm::vec3 color) {
+        glm::vec3 half = size * 0.5f;
+        glm::vec3 p[8] = {
+            center + glm::vec3(-half.x, -half.y, -half.z),
+            center + glm::vec3( half.x, -half.y, -half.z),
+            center + glm::vec3( half.x,  half.y, -half.z),
+            center + glm::vec3(-half.x,  half.y, -half.z),
+            center + glm::vec3(-half.x, -half.y,  half.z),
+            center + glm::vec3( half.x, -half.y,  half.z),
+            center + glm::vec3( half.x,  half.y,  half.z),
+            center + glm::vec3(-half.x,  half.y,  half.z)
+        };
+        
+        // Front
+        addQuad(verts, p[4], p[5], p[6], p[7], glm::vec3(0,0,1), color);
+        // Back
+        addQuad(verts, p[1], p[0], p[3], p[2], glm::vec3(0,0,-1), color);
+        // Top
+        addQuad(verts, p[3], p[2], p[6], p[7], glm::vec3(0,1,0), color);
+        // Bottom
+        addQuad(verts, p[4], p[5], p[1], p[0], glm::vec3(0,-1,0), color);
+        // Right
+        addQuad(verts, p[5], p[1], p[2], p[6], glm::vec3(1,0,0), color);
+        // Left
+        addQuad(verts, p[0], p[4], p[7], p[3], glm::vec3(-1,0,0), color);
+    }
+    
+    void addCylinder(std::vector<float>& verts, glm::vec3 center, float radius, float height, glm::vec3 color) {
+        addCylinderRotated(verts, center, radius, height, glm::vec3(0.0f), color);
+    }
+    
+    void addCylinderRotated(std::vector<float>& verts, glm::vec3 center, float radius, float height, glm::vec3 rotation, glm::vec3 color) {
+        int segments = 16;
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, center);
+        model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(1,0,0));
+        model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(0,1,0));
+        model = glm::rotate(model, glm::radians(rotation.z), glm::vec3(0,0,1));
+        
+        glm::vec3 topCenter(0, height/2, 0);
+        glm::vec3 botCenter(0, -height/2, 0);
+        
+        for(int i = 0; i < segments; ++i) {
+            float theta0 = 2.0f * 3.14159f * i / segments;
+            float theta1 = 2.0f * 3.14159f * (i+1) / segments;
+            
+            glm::vec3 p0(radius * cos(theta0), height/2, radius * sin(theta0));
+            glm::vec3 p1(radius * cos(theta1), height/2, radius * sin(theta1));
+            glm::vec3 p2(radius * cos(theta0), -height/2, radius * sin(theta0));
+            glm::vec3 p3(radius * cos(theta1), -height/2, radius * sin(theta1));
+            
+            glm::vec3 n0(cos(theta0), 0, sin(theta0));
+            glm::vec3 n1(cos(theta1), 0, sin(theta1));
+            
+            // Side
+            addVertexTransformed(verts, p0, n0, color, model);
+            addVertexTransformed(verts, p2, n0, color, model);
+            addVertexTransformed(verts, p1, n1, color, model);
+            
+            addVertexTransformed(verts, p1, n1, color, model);
+            addVertexTransformed(verts, p2, n0, color, model);
+            addVertexTransformed(verts, p3, n1, color, model);
+            
+            // Caps
+            addVertexTransformed(verts, topCenter, glm::vec3(0,1,0), color, model);
+            addVertexTransformed(verts, p1, glm::vec3(0,1,0), color, model);
+            addVertexTransformed(verts, p0, glm::vec3(0,1,0), color, model);
+            
+            addVertexTransformed(verts, botCenter, glm::vec3(0,-1,0), color, model);
+            addVertexTransformed(verts, p2, glm::vec3(0,-1,0), color, model);
+            addVertexTransformed(verts, p3, glm::vec3(0,-1,0), color, model);
+        }
+    }
+    
+    void addQuad(std::vector<float>& verts, glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, glm::vec3 normal, glm::vec3 color) {
+        addVertex(verts, p0, normal, color);
+        addVertex(verts, p1, normal, color);
+        addVertex(verts, p2, normal, color);
+        
+        addVertex(verts, p0, normal, color);
+        addVertex(verts, p2, normal, color);
+        addVertex(verts, p3, normal, color);
+    }
+    
+    void addVertex(std::vector<float>& verts, glm::vec3 pos, glm::vec3 normal, glm::vec3 color) {
+        verts.push_back(pos.x);
+        verts.push_back(pos.y);
+        verts.push_back(pos.z);
+        verts.push_back(normal.x);
+        verts.push_back(normal.y);
+        verts.push_back(normal.z);
+        // Use TexCoords to store color!
+        // We'll assume the shader can use tex coords as color or we modify the shader.
+        // Wait, main shader uses objectColor uniform.
+        // We can't pass per-vertex color easily unless we modify VAO/Shader.
+        // BUT, I can simulate textureType behavior.
+        // Actually, the main shader uses `objectColor`.
+        // To support multi-colored human in one draw call we need per-vertex color.
+        // The current `pbrVertex.vs` and `pbrFragment.fs` probably don't support per-vertex color attribute?
+        // Let's check `pbrVertex.vs`.
+        
+        // HACK: I will store Color in the Texture Coordinates!
+        // U = Red, V = Green. But we need Blue.
+        // This is tricky.
+        // Instead, I will assume we render each PART separately with setting uniforms?
+        // No, I want one draw call per body part type or something efficient.
+        
+        // BETTER: I will modify `addVertex` to NOT take color, but instead
+        // I will render Head, Body, etc separately and set `objectColor` uniform before drawing each.
+        // So `addSphere` etc will just add geometry.
+        
+        // Reverting addVertex to match standard format
+        verts.push_back(0.0f); // U
+        verts.push_back(0.0f); // V
+    }
+    
+    void addVertexTransformed(std::vector<float>& verts, glm::vec3 pos, glm::vec3 normal, glm::vec3 color, glm::mat4 model) {
+        glm::vec4 p = model * glm::vec4(pos, 1.0f);
+        glm::vec4 n = model * glm::vec4(normal, 0.0f);
+        addVertex(verts, glm::vec3(p), glm::normalize(glm::vec3(n)), color);
+    }
+    
+    // ============================================================
+    // UTILITY
+    // ============================================================
+    
+    unsigned int createVAO(const std::vector<float>& vertices) {
+        unsigned int VAO, VBO;
+        glGenVertexArrays(1, &VAO);
+        glGenBuffers(1, &VBO);
+        
+        glBindVertexArray(VAO);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+        
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+        glEnableVertexAttribArray(2);
+        
+        return VAO;
+    }
+    
+    // ============================================================
+    // RENDERING
+    // ============================================================
+    
+    void render(Shader& shader, glm::vec3 position, float rotation) {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, position);
+        model = glm::rotate(model, glm::radians(rotation), glm::vec3(0, 1, 0));
+        
+        shader.setMat4("model", model);
+        shader.setInt("textureType", 0); // No texture
+        shader.setFloat("ambientStrength", 0.4f);
+        shader.setFloat("diffuseStrength", 0.7f);
+        shader.setFloat("specularStrength", 0.3f);
+        shader.setFloat("shininess", 16.0f);
+        
+        // Since I can't pass per-vertex color easily without shader mods,
+        // and I separated VAOs by part, I can stick to the plan:
+        // But my geometry generation functions (addSphere etc) were written to take color.
+        // I need to separate the geometry into groups by color?
+        // Or just render everything with one skin color for now?
+        // The user wants red shirt.
+        // My struct separates: Head, Body, Arms, Legs.
+        
+        // Head (Skin + Hair + Eyes) -> Mixed colors problem.
+        // Actually, the Head VAO contains skin, hair, and eyes geometry.
+        // If I render it all at once, it will have *one* `objectColor`.
+        // This is a problem.
+        
+        // Solution: Split VAOs by Material, not by Body Part.
+        // Or use multiple draw calls for each feature.
+        // I will refactor `generateGeometry` to fill:
+        // skinVerts, shirtVerts, hairVerts, pantVerts, eyeVerts.
+        
+        // Re-doing the class structure in next thought step.
+    }
+};
+
+#endif // HUMAN_GENERATOR_H
