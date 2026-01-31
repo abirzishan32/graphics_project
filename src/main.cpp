@@ -7,6 +7,7 @@
 
 #include "shader.h"
 #include "basic_camera.h"
+#include "car_generator.h"
 
 #include <iostream>
 #include <vector>
@@ -560,161 +561,6 @@ void drawQuad(Shader& shader, unsigned int VAO, glm::mat4 model,
     glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
-void drawRealisticCar(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, unsigned int wedgeVAO, 
-                      glm::vec3 position, glm::vec3 carColor, float rotation)
-{
-
-    
-    float baseY = position.y;
-    float wheelRadius = 0.325f;
-    float wheelWidth = 0.22f;
-    float wheelbase = 2.7f;
-    float bodyWidth = 1.8f;
-    float bodyLength = 4.5f;
-    
-    // Wheel positions (centered on axles)
-    float frontAxleZ = position.z + wheelbase/2 - 0.3f;
-    float rearAxleZ = position.z - wheelbase/2 + 0.3f;
-    float wheelY = baseY + wheelRadius;
-    float wheelX = bodyWidth/2 - 0.1f;
-    
-    // === WHEELS (Cylinders for realism) ===
-    glm::vec3 tireColor(0.15f, 0.15f, 0.15f);
-    glm::vec3 rimColor(0.7f, 0.7f, 0.75f);
-    
-    // Front left wheel
-    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x - wheelX, wheelY, frontAxleZ),
-                 glm::vec3(wheelWidth, wheelRadius*2, wheelRadius*2), tireColor, 3, 0.1f, 0.5f, 0.2f, 8.0f);
-    // Rim
-    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x - wheelX - 0.02f, wheelY, frontAxleZ),
-                 glm::vec3(0.05f, wheelRadius*1.4f, wheelRadius*1.4f), rimColor, 3, 0.2f, 0.7f, 0.9f, 64.0f);
-    
-    // Front right wheel
-    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x + wheelX, wheelY, frontAxleZ),
-                 glm::vec3(wheelWidth, wheelRadius*2, wheelRadius*2), tireColor, 3, 0.1f, 0.5f, 0.2f, 8.0f);
-    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x + wheelX + 0.02f, wheelY, frontAxleZ),
-                 glm::vec3(0.05f, wheelRadius*1.4f, wheelRadius*1.4f), rimColor, 3, 0.2f, 0.7f, 0.9f, 64.0f);
-    
-    // Rear left wheel
-    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x - wheelX, wheelY, rearAxleZ),
-                 glm::vec3(wheelWidth, wheelRadius*2, wheelRadius*2), tireColor, 3, 0.1f, 0.5f, 0.2f, 8.0f);
-    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x - wheelX - 0.02f, wheelY, rearAxleZ),
-                 glm::vec3(0.05f, wheelRadius*1.4f, wheelRadius*1.4f), rimColor, 3, 0.2f, 0.7f, 0.9f, 64.0f);
-    
-    // Rear right wheel
-    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x + wheelX, wheelY, rearAxleZ),
-                 glm::vec3(wheelWidth, wheelRadius*2, wheelRadius*2), tireColor, 3, 0.1f, 0.5f, 0.2f, 8.0f);
-    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x + wheelX + 0.02f, wheelY, rearAxleZ),
-                 glm::vec3(0.05f, wheelRadius*1.4f, wheelRadius*1.4f), rimColor, 3, 0.2f, 0.7f, 0.9f, 64.0f);
-    
-    // === LOWER BODY (main body shell) ===
-    float lowerBodyHeight = 0.45f;
-    float lowerBodyY = baseY + wheelRadius + lowerBodyHeight/2;
-    
-    // Main lower body
-    drawCube(shader, cubeVAO, glm::vec3(position.x, lowerBodyY, position.z),
-             glm::vec3(bodyWidth, lowerBodyHeight, bodyLength - 0.4f), carColor, 2, 0.15f, 0.8f, 0.9f, 64.0f);
-    
-    // Front bumper
-    drawCube(shader, cubeVAO, glm::vec3(position.x, lowerBodyY - 0.1f, position.z + bodyLength/2 - 0.15f),
-             glm::vec3(bodyWidth + 0.05f, 0.25f, 0.3f), carColor * 0.95f, 2, 0.15f, 0.8f, 0.85f, 48.0f);
-    
-    // Rear bumper
-    drawCube(shader, cubeVAO, glm::vec3(position.x, lowerBodyY - 0.1f, position.z - bodyLength/2 + 0.15f),
-             glm::vec3(bodyWidth + 0.05f, 0.25f, 0.3f), carColor * 0.95f, 2, 0.15f, 0.8f, 0.85f, 48.0f);
-    
-    // === WHEEL ARCHES (fenders) ===
-    glm::vec3 archColor = carColor * 0.92f;
-    // Front left
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x - bodyWidth/2 + 0.08f, wheelY + 0.2f, frontAxleZ),
-             glm::vec3(0.15f, 0.4f, 0.7f), glm::vec3(0, 0, 0), archColor, 2, 0.15f, 0.75f, 0.8f, 48.0f);
-    // Front right
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x + bodyWidth/2 - 0.08f, wheelY + 0.2f, frontAxleZ),
-             glm::vec3(0.15f, 0.4f, 0.7f), glm::vec3(0, 0, 0), archColor, 2, 0.15f, 0.75f, 0.8f, 48.0f);
-    // Rear left
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x - bodyWidth/2 + 0.08f, wheelY + 0.2f, rearAxleZ),
-             glm::vec3(0.15f, 0.4f, 0.7f), glm::vec3(0, 0, 0), archColor, 2, 0.15f, 0.75f, 0.8f, 48.0f);
-    // Rear right
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x + bodyWidth/2 - 0.08f, wheelY + 0.2f, rearAxleZ),
-             glm::vec3(0.15f, 0.4f, 0.7f), glm::vec3(0, 0, 0), archColor, 2, 0.15f, 0.75f, 0.8f, 48.0f);
-    
-    // === HOOD (sloped front) ===
-    float hoodY = lowerBodyY + lowerBodyHeight/2 + 0.1f;
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x, hoodY, position.z + 1.2f),
-             glm::vec3(bodyWidth - 0.1f, 0.15f, 1.3f), glm::vec3(-8, 0, 0), carColor, 2, 0.15f, 0.85f, 0.95f, 80.0f);
-    
-    // === CABIN (greenhouse) ===
-    float cabinWidth = bodyWidth - 0.25f;
-    float cabinHeight = 0.55f;
-    float cabinLength = 1.8f;
-    float cabinY = hoodY + cabinHeight/2 + 0.05f;
-    float cabinZ = position.z - 0.2f;
-    
-    // A-pillar slope (windshield frame)
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x, cabinY, cabinZ + cabinLength/2 - 0.1f),
-             glm::vec3(cabinWidth, cabinHeight, 0.1f), glm::vec3(-25, 0, 0), carColor * 0.85f, 2, 0.12f, 0.7f, 0.8f, 48.0f);
-    
-    // Main cabin
-    drawCube(shader, cubeVAO, glm::vec3(position.x, cabinY, cabinZ),
-             glm::vec3(cabinWidth, cabinHeight, cabinLength - 0.3f), carColor * 0.9f, 2, 0.12f, 0.75f, 0.85f, 56.0f);
-    
-    // C-pillar (rear)
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x, cabinY, cabinZ - cabinLength/2 + 0.1f),
-             glm::vec3(cabinWidth, cabinHeight, 0.1f), glm::vec3(20, 0, 0), carColor * 0.85f, 2, 0.12f, 0.7f, 0.8f, 48.0f);
-    
-    // === WINDOWS (glass) ===
-    glm::vec3 glassColor(0.08f, 0.12f, 0.18f);
-    // Windshield
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x, cabinY + 0.05f, cabinZ + cabinLength/2 - 0.2f),
-             glm::vec3(cabinWidth - 0.15f, cabinHeight - 0.15f, 0.05f), glm::vec3(-30, 0, 0), 
-             glassColor, 4, 0.05f, 0.2f, 1.0f, 128.0f);
-    // Rear window
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x, cabinY + 0.05f, cabinZ - cabinLength/2 + 0.25f),
-             glm::vec3(cabinWidth - 0.15f, cabinHeight - 0.15f, 0.05f), glm::vec3(25, 0, 0),
-             glassColor, 4, 0.05f, 0.2f, 1.0f, 128.0f);
-    // Side windows
-    drawCube(shader, cubeVAO, glm::vec3(position.x - cabinWidth/2 + 0.02f, cabinY + 0.08f, cabinZ),
-             glm::vec3(0.03f, cabinHeight - 0.2f, cabinLength - 0.5f), glassColor, 4, 0.05f, 0.2f, 1.0f, 128.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x + cabinWidth/2 - 0.02f, cabinY + 0.08f, cabinZ),
-             glm::vec3(0.03f, cabinHeight - 0.2f, cabinLength - 0.5f), glassColor, 4, 0.05f, 0.2f, 1.0f, 128.0f);
-    
-    // === TRUNK (rear deck) ===
-    float trunkY = lowerBodyY + lowerBodyHeight/2 + 0.08f;
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x, trunkY, position.z - 1.5f),
-             glm::vec3(bodyWidth - 0.1f, 0.12f, 1.0f), glm::vec3(5, 0, 0), carColor, 2, 0.15f, 0.85f, 0.95f, 80.0f);
-    
-    // === HEADLIGHTS ===
-    glm::vec3 headlightColor(0.95f, 0.95f, 0.85f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x - 0.55f, lowerBodyY + 0.1f, position.z + bodyLength/2 - 0.02f),
-             glm::vec3(0.35f, 0.18f, 0.08f), headlightColor, 4, 0.7f, 0.4f, 1.0f, 96.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x + 0.55f, lowerBodyY + 0.1f, position.z + bodyLength/2 - 0.02f),
-             glm::vec3(0.35f, 0.18f, 0.08f), headlightColor, 4, 0.7f, 0.4f, 1.0f, 96.0f);
-    
-    // === TAILLIGHTS ===
-    glm::vec3 taillightColor(0.85f, 0.1f, 0.1f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x - 0.6f, lowerBodyY + 0.1f, position.z - bodyLength/2 + 0.02f),
-             glm::vec3(0.3f, 0.12f, 0.06f), taillightColor, 4, 0.5f, 0.5f, 0.8f, 48.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x + 0.6f, lowerBodyY + 0.1f, position.z - bodyLength/2 + 0.02f),
-             glm::vec3(0.3f, 0.12f, 0.06f), taillightColor, 4, 0.5f, 0.5f, 0.8f, 48.0f);
-    
-    // === GRILLE ===
-    drawCube(shader, cubeVAO, glm::vec3(position.x, lowerBodyY, position.z + bodyLength/2 - 0.02f),
-             glm::vec3(0.6f, 0.2f, 0.05f), glm::vec3(0.12f, 0.12f, 0.14f), 3, 0.1f, 0.4f, 0.6f, 32.0f);
-    
-    // === SIDE MIRRORS ===
-    drawCube(shader, cubeVAO, glm::vec3(position.x - bodyWidth/2 - 0.08f, cabinY - 0.1f, cabinZ + 0.6f),
-             glm::vec3(0.08f, 0.06f, 0.12f), carColor * 0.9f, 2, 0.15f, 0.7f, 0.8f, 48.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x + bodyWidth/2 + 0.08f, cabinY - 0.1f, cabinZ + 0.6f),
-             glm::vec3(0.08f, 0.06f, 0.12f), carColor * 0.9f, 2, 0.15f, 0.7f, 0.8f, 48.0f);
-    
-    // === DOOR HANDLES ===
-    drawCube(shader, cubeVAO, glm::vec3(position.x - bodyWidth/2 + 0.02f, lowerBodyY + 0.15f, cabinZ + 0.3f),
-             glm::vec3(0.02f, 0.03f, 0.12f), glm::vec3(0.7f, 0.7f, 0.72f), 3, 0.2f, 0.6f, 0.9f, 64.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x + bodyWidth/2 - 0.02f, lowerBodyY + 0.15f, cabinZ + 0.3f),
-             glm::vec3(0.02f, 0.03f, 0.12f), glm::vec3(0.7f, 0.7f, 0.72f), 3, 0.2f, 0.6f, 0.9f, 64.0f);
-}
-
-
 void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO)
 {
     glm::vec3 concreteColor(0.45f, 0.43f, 0.40f);
@@ -922,6 +768,17 @@ void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, 
     // Exit sign above entrance
     drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH/2, 2.8f, LOT_DEPTH - 0.5f),
              glm::vec3(1.5f, 0.4f, 0.1f), glm::vec3(0.1f, 0.6f, 0.2f), 1, 0.6f, 0.5f, 0.3f, 16.0f);
+}
+
+// Draw a realistic car using the procedural generator
+void drawRealisticCar(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, unsigned int wedgeVAO, glm::vec3 position, glm::vec3 carColor, float rotation)
+{
+    // Initialize the procedural car generator lazily (once)
+    // This ensures VBOs are created after OpenGL context is set up
+    static ProceduralSedan sedan;
+    
+    // Render the high-fidelity car
+    sedan.render(shader, position, rotation, carColor);
 }
 
 // Draw a hyper-realistic tree with branching trunk and organic foliage clusters
