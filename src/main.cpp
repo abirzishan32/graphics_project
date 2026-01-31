@@ -67,6 +67,10 @@ bool firstMouse = true;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
+// Lights toggle (L key to toggle)
+bool lightsOn = true;
+bool lKeyPressed = false;
+
 int main()
 {
     // Initialize GLFW
@@ -170,6 +174,16 @@ void processInput(GLFWwindow *window)
         camera.ProcessKeyboard(LEFT, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         camera.ProcessKeyboard(RIGHT, deltaTime);
+    
+    // L key to toggle lights on/off
+    if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
+        if (!lKeyPressed) {
+            lightsOn = !lightsOn;
+            lKeyPressed = true;
+        }
+    } else {
+        lKeyPressed = false;
+    }
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
@@ -390,36 +404,61 @@ unsigned int createWedgeVAO()
 
 void setupLighting(Shader& shader)
 {
-    // Directional light (sunlight through windows) - coming from right side
+    // Pass light toggle state to shader
+    shader.setBool("lightsOn", lightsOn);
+    
+    // Window positions for volumetric scattering (4 windows)
+    shader.setInt("numWindows", 4);
+    float windowSpacing = 8.0f;
+    for (int i = 0; i < 4; i++) {
+        float z = windowSpacing/2 + i * windowSpacing;
+        std::string base = "windowPositions[" + std::to_string(i) + "]";
+        shader.setVec3(base, glm::vec3(0.0f, 2.5f, z));
+    }
+    shader.setVec3("sunDirection", glm::normalize(glm::vec3(1.0f, -0.5f, 0.2f)));
+    
+    // Directional light (sunlight through windows) - ALWAYS ON for ambient window light
     shader.setBool("useDirLight", true);
     shader.setVec3("dirLight.direction", glm::vec3(-0.5f, -0.7f, -0.3f));
-    shader.setVec3("dirLight.ambient", glm::vec3(0.2f, 0.18f, 0.15f));   // Ia - ambient intensity
-    shader.setVec3("dirLight.diffuse", glm::vec3(1.0f, 0.95f, 0.8f));     // Id - diffuse intensity (bright sunlight)
-    shader.setVec3("dirLight.specular", glm::vec3(1.0f, 0.95f, 0.9f));   // Is - specular intensity (bright highlights)
-
-    // Point lights (ceiling-mounted fixtures) - warm indoor lighting
-    int numLights = 12;
-    shader.setInt("numPointLights", numLights);
     
-    float lightSpacingX = LOT_WIDTH / 4.0f;
-    float lightSpacingZ = LOT_DEPTH / 3.0f;
-    int lightIdx = 0;
-    
-    for (int i = 0; i < 4 && lightIdx < numLights; i++) {
-        for (int j = 0; j < 3 && lightIdx < numLights; j++) {
-            float x = lightSpacingX * (i + 0.5f);
-            float z = lightSpacingZ * (j + 0.5f);
-            
-            std::string base = "pointLights[" + std::to_string(lightIdx) + "]";
-            shader.setVec3(base + ".position", glm::vec3(x, CEILING_HEIGHT - 0.3f, z));
-            shader.setVec3(base + ".ambient", glm::vec3(0.12f, 0.11f, 0.09f));   // Ia - warm ambient
-            shader.setVec3(base + ".diffuse", glm::vec3(1.0f, 0.95f, 0.85f));     // Id - bright warm diffuse
-            shader.setVec3(base + ".specular", glm::vec3(1.0f, 0.95f, 0.9f));    // Is - strong specular for highlights
-            shader.setFloat(base + ".constant", 1.0f);
-            shader.setFloat(base + ".linear", 0.07f);      // Reduced for longer light reach
-            shader.setFloat(base + ".quadratic", 0.017f);  // Reduced for softer falloff
-            lightIdx++;
+    if (lightsOn) {
+        // Full lighting when lights are on
+        shader.setVec3("dirLight.ambient", glm::vec3(0.25f, 0.22f, 0.18f));
+        shader.setVec3("dirLight.diffuse", glm::vec3(1.2f, 1.1f, 0.9f));
+        shader.setVec3("dirLight.specular", glm::vec3(1.2f, 1.15f, 1.0f));
+        
+        // Point lights (ceiling-mounted fixtures) - INCREASED INTENSITY
+        int numLights = 12;
+        shader.setInt("numPointLights", numLights);
+        
+        float lightSpacingX = LOT_WIDTH / 4.0f;
+        float lightSpacingZ = LOT_DEPTH / 3.0f;
+        int lightIdx = 0;
+        
+        for (int i = 0; i < 4 && lightIdx < numLights; i++) {
+            for (int j = 0; j < 3 && lightIdx < numLights; j++) {
+                float x = lightSpacingX * (i + 0.5f);
+                float z = lightSpacingZ * (j + 0.5f);
+                
+                std::string base = "pointLights[" + std::to_string(lightIdx) + "]";
+                shader.setVec3(base + ".position", glm::vec3(x, CEILING_HEIGHT - 0.3f, z));
+                shader.setVec3(base + ".ambient", glm::vec3(0.18f, 0.16f, 0.12f));
+                shader.setVec3(base + ".diffuse", glm::vec3(1.4f, 1.3f, 1.1f));
+                shader.setVec3(base + ".specular", glm::vec3(1.3f, 1.2f, 1.0f));
+                shader.setFloat(base + ".constant", 1.0f);
+                shader.setFloat(base + ".linear", 0.045f);
+                shader.setFloat(base + ".quadratic", 0.0075f);
+                lightIdx++;
+            }
         }
+    } else {
+        // Lights OFF - only very dim ambient from windows
+        shader.setVec3("dirLight.ambient", glm::vec3(0.03f, 0.035f, 0.04f));
+        shader.setVec3("dirLight.diffuse", glm::vec3(0.15f, 0.14f, 0.12f));
+        shader.setVec3("dirLight.specular", glm::vec3(0.1f, 0.1f, 0.08f));
+        
+        // Turn off point lights completely
+        shader.setInt("numPointLights", 0);
     }
 }
 
@@ -499,9 +538,7 @@ void drawQuad(Shader& shader, unsigned int VAO, glm::mat4 model,
 void drawRealisticCar(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, unsigned int wedgeVAO, 
                       glm::vec3 position, glm::vec3 carColor, float rotation)
 {
-    // Realistic sedan proportions based on car design principles:
-    // Wheelbase ~2.7m, total length ~4.5m, width ~1.8m, height ~1.4m
-    // Wheel diameter ~0.65m
+
     
     float baseY = position.y;
     float wheelRadius = 0.325f;

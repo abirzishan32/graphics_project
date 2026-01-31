@@ -15,6 +15,9 @@ uniform float diffuseStrength;   // Kd
 uniform float specularStrength;  // Ks
 uniform float shininess;         // n (exponent)
 
+// Lights toggle
+uniform bool lightsOn;
+
 // Directional Light (sunlight through windows)
 struct DirLight {
     vec3 direction;
@@ -39,26 +42,105 @@ struct PointLight {
 uniform PointLight pointLights[MAX_POINT_LIGHTS];
 uniform int numPointLights;
 
+// Volumetric Light Scattering (God Rays) - window positions
+#define MAX_WINDOWS 8
+uniform vec3 windowPositions[MAX_WINDOWS];
+uniform int numWindows;
+uniform vec3 sunDirection;
+
 // Procedural texture type
 uniform int textureType;  // 0=concrete, 1=painted line, 2=car paint, 3=metal, 4=glass
 
 // ============================================================
-// Phong Illumination Model:
-// I = Ia * Ka + Id * Kd * max(N · L, 0) + Is * Ks * pow(max(R · V, 0), n)
+// VOLUMETRIC LIGHT SCATTERING (God Rays) - Shader-Based
 // ============================================================
+// This simulates light scattering through dusty/foggy air
+// Based on the idea that light is scattered by particles in the atmosphere
+// No solid geometry - purely mathematical simulation
 
-// Calculate directional light contribution
+float hash(vec3 p) {
+    return fract(sin(dot(p, vec3(12.9898, 78.233, 45.543))) * 43758.5453);
+}
+
+// 3D noise for volumetric scattering
+float noise3D(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f); // Smoothstep
+    
+    float n = hash(i) * (1.0 - f.x) * (1.0 - f.y) * (1.0 - f.z)
+            + hash(i + vec3(1,0,0)) * f.x * (1.0 - f.y) * (1.0 - f.z)
+            + hash(i + vec3(0,1,0)) * (1.0 - f.x) * f.y * (1.0 - f.z)
+            + hash(i + vec3(1,1,0)) * f.x * f.y * (1.0 - f.z)
+            + hash(i + vec3(0,0,1)) * (1.0 - f.x) * (1.0 - f.y) * f.z
+            + hash(i + vec3(1,0,1)) * f.x * (1.0 - f.y) * f.z
+            + hash(i + vec3(0,1,1)) * (1.0 - f.x) * f.y * f.z
+            + hash(i + vec3(1,1,1)) * f.x * f.y * f.z;
+    return n;
+}
+
+// Calculate light shaft intensity at a point
+// This simulates Mie scattering in dusty air
+float calculateLightShaft(vec3 worldPos, vec3 windowPos, vec3 lightDir) {
+    // Vector from window to this fragment
+    vec3 toFragment = worldPos - windowPos;
+    
+    // Project fragment position onto light ray direction
+    float projLen = dot(toFragment, lightDir);
+    
+    // Only consider points in front of window (inside parking lot)
+    if (projLen < 0.0 || projLen > 15.0) return 0.0;
+    
+    // Calculate perpendicular distance from light ray
+    vec3 closestPointOnRay = windowPos + lightDir * projLen;
+    float perpDist = length(worldPos - closestPointOnRay);
+    
+    // Light shaft width (wider near window, spreading out)
+    float beamWidth = 0.8 + projLen * 0.15;
+    
+    // Gaussian falloff from ray center
+    float intensity = exp(-perpDist * perpDist / (beamWidth * beamWidth));
+    
+    // Decrease intensity with distance from window
+    float distFalloff = 1.0 - projLen / 18.0;
+    distFalloff = max(distFalloff, 0.0);
+    
+    // Add dust/particle noise for realistic scattering
+    float dustNoise = noise3D(worldPos * 2.0);
+    dustNoise = 0.7 + dustNoise * 0.6; // Range 0.7-1.3
+    
+    return intensity * distFalloff * dustNoise;
+}
+
+// Calculate total volumetric scattering from all windows
+vec3 calculateVolumetricScattering(vec3 worldPos) {
+    vec3 scattering = vec3(0.0);
+    vec3 sunlightColor = vec3(1.0, 0.9, 0.65); // Warm golden sunlight
+    
+    // Sun ray direction (from window into the room)
+    vec3 rayDir = normalize(sunDirection);
+    
+    for (int i = 0; i < numWindows && i < MAX_WINDOWS; i++) {
+        float shaftIntensity = calculateLightShaft(worldPos, windowPositions[i], rayDir);
+        
+        // Accumulate light scattering
+        scattering += sunlightColor * shaftIntensity;
+    }
+    
+    return scattering;
+}
+
+// ============================================================
+// Phong Illumination Model
+// ============================================================
 vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 baseColor) {
     vec3 lightDir = normalize(-light.direction);
     
-    // Ambient component: Ia * Ka
     vec3 ambient = light.ambient * ambientStrength * baseColor;
     
-    // Diffuse component: Id * Kd * max(N · L, 0)
     float NdotL = max(dot(normal, lightDir), 0.0);
     vec3 diffuse = light.diffuse * diffuseStrength * NdotL * baseColor;
     
-    // Specular component: Is * Ks * pow(max(R · V, 0), n)
     vec3 reflectDir = reflect(-lightDir, normal);
     float RdotV = max(dot(reflectDir, viewDir), 0.0);
     float spec = pow(RdotV, shininess);
@@ -67,28 +149,22 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 baseColor) {
     return ambient + diffuse + specular;
 }
 
-// Calculate point light contribution
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 baseColor) {
     vec3 lightDir = normalize(light.position - fragPos);
     
-    // Attenuation based on distance
     float distance = length(light.position - fragPos);
     float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
     
-    // Ambient component: Ia * Ka
     vec3 ambient = light.ambient * ambientStrength * baseColor;
     
-    // Diffuse component: Id * Kd * max(N · L, 0)
     float NdotL = max(dot(normal, lightDir), 0.0);
     vec3 diffuse = light.diffuse * diffuseStrength * NdotL * baseColor;
     
-    // Specular component: Is * Ks * pow(max(R · V, 0), n)
     vec3 reflectDir = reflect(-lightDir, normal);
     float RdotV = max(dot(reflectDir, viewDir), 0.0);
     float spec = pow(RdotV, shininess);
     vec3 specular = light.specular * specularStrength * spec;
     
-    // Apply attenuation to all components
     ambient *= attenuation;
     diffuse *= attenuation;
     specular *= attenuation;
@@ -96,62 +172,40 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, v
     return ambient + diffuse + specular;
 }
 
-// Procedural concrete texture
+// ============================================================
+// Procedural Texturing
+// ============================================================
 vec3 proceduralConcrete(vec2 uv, vec3 baseColor) {
-    // Multi-octave noise approximation for concrete grain
-    float scale1 = 50.0;
-    float scale2 = 150.0;
-    float scale3 = 400.0;
-    
-    // Simple hash-based noise
-    float n1 = fract(sin(dot(floor(uv * scale1), vec2(12.9898, 78.233))) * 43758.5453);
-    float n2 = fract(sin(dot(floor(uv * scale2), vec2(12.9898, 78.233))) * 43758.5453);
-    float n3 = fract(sin(dot(floor(uv * scale3), vec2(12.9898, 78.233))) * 43758.5453);
-    
-    // Combine noise at different frequencies
+    float n1 = fract(sin(dot(floor(uv * 50.0), vec2(12.9898, 78.233))) * 43758.5453);
+    float n2 = fract(sin(dot(floor(uv * 150.0), vec2(12.9898, 78.233))) * 43758.5453);
+    float n3 = fract(sin(dot(floor(uv * 400.0), vec2(12.9898, 78.233))) * 43758.5453);
     float noise = n1 * 0.5 + n2 * 0.3 + n3 * 0.2;
-    
-    // Add subtle color variation
     vec3 variation = vec3(noise * 0.15 - 0.075);
-    
-    // Add darker spots (aggregate)
     float spots = step(0.92, n2);
     variation -= vec3(spots * 0.1);
-    
     return clamp(baseColor + variation, 0.0, 1.0);
 }
 
-// Procedural painted line texture
 vec3 proceduralPaintedLine(vec2 uv, vec3 paintColor) {
-    // Slight wear/fade variation
     float wear = fract(sin(dot(floor(uv * 200.0), vec2(12.9898, 78.233))) * 43758.5453);
-    float fadeAmount = wear * 0.15;
-    
-    // Edge softening
-    return paintColor * (1.0 - fadeAmount);
+    return paintColor * (1.0 - wear * 0.15);
 }
 
-// Procedural car paint (metallic)
 vec3 proceduralCarPaint(vec2 uv, vec3 baseColor, vec3 viewDir, vec3 normal) {
-    // Metallic flake effect
     float flake = fract(sin(dot(floor(uv * 800.0), vec2(12.9898, 78.233))) * 43758.5453);
     flake = smoothstep(0.7, 1.0, flake) * 0.3;
-    
-    // View-dependent color shift (subtle)
     float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0);
-    
     return baseColor + vec3(flake) + vec3(fresnel * 0.1);
 }
 
-// Procedural metal texture
 vec3 proceduralMetal(vec2 uv, vec3 baseColor) {
-    // Brushed metal effect
     float brush = fract(sin(uv.x * 500.0 + uv.y * 2.0) * 43758.5453);
-    brush = brush * 0.1 - 0.05;
-    
-    return baseColor + vec3(brush);
+    return baseColor + vec3(brush * 0.1 - 0.05);
 }
 
+// ============================================================
+// Main
+// ============================================================
 void main()
 {
     vec3 norm = normalize(Normal);
@@ -159,42 +213,57 @@ void main()
     
     // Get base color with procedural texturing
     vec3 baseColor = objectColor;
-    vec2 uv = FragPos.xz * 0.1;  // World-space UV for tiling
+    vec2 uv = FragPos.xz * 0.1;
     
     if (textureType == 0) {
-        // Concrete
         baseColor = proceduralConcrete(uv, objectColor);
     } else if (textureType == 1) {
-        // Painted line
         baseColor = proceduralPaintedLine(uv, objectColor);
     } else if (textureType == 2) {
-        // Car paint
         baseColor = proceduralCarPaint(uv, objectColor, viewDir, norm);
     } else if (textureType == 3) {
-        // Metal
         baseColor = proceduralMetal(uv, objectColor);
     }
-    // textureType == 4: glass (uses objectColor directly)
     
-    // Accumulate lighting from all sources
+    // Accumulate lighting
     vec3 result = vec3(0.0);
     
-    // Add directional light (sunlight through windows)
+    // Add directional light
     if (useDirLight) {
         result += CalcDirLight(dirLight, norm, viewDir, baseColor);
     }
     
-    // Add point lights (ceiling fixtures)
+    // Add point lights
     for (int i = 0; i < numPointLights && i < MAX_POINT_LIGHTS; i++) {
         result += CalcPointLight(pointLights[i], norm, FragPos, viewDir, baseColor);
     }
     
-    // Ensure minimum ambient lighting (fill light)
-    vec3 globalAmbient = baseColor * 0.08;
+    // Minimum ambient
+    vec3 globalAmbient = baseColor * (lightsOn ? 0.1 : 0.02);
     result += globalAmbient;
     
-    // Gamma correction for more realistic output
+    // ========================================
+    // VOLUMETRIC LIGHT SCATTERING (God Rays)
+    // ========================================
+    // Apply when inside the parking lot (X between 0 and LOT_WIDTH, Z between 0 and LOT_DEPTH)
+    // More visible when lights are OFF
+    
+    float volumetricStrength = lightsOn ? 0.08 : 0.25;
+    
+    // Check if fragment is inside the parking lot volume
+    if (FragPos.x > -1.0 && FragPos.x < 62.0 && 
+        FragPos.z > -1.0 && FragPos.z < 42.0 && 
+        FragPos.y > 0.0 && FragPos.y < 4.0) {
+        
+        vec3 volumetric = calculateVolumetricScattering(FragPos);
+        result += volumetric * volumetricStrength;
+    }
+    
+    // Gamma correction
     result = pow(result, vec3(1.0/2.2));
+    
+    // Clamp to prevent over-brightness
+    result = min(result, vec3(1.0));
     
     FragColor = vec4(result, 1.0);
 }
