@@ -27,13 +27,12 @@ public:
     int hairCount = 0;
     int eyeCount = 0;
     
-    // Skin color (Realistic tone)
-    glm::vec3 skinColor = glm::vec3(0.85f, 0.65f, 0.55f);
-    glm::vec3 hairColor = glm::vec3(0.1f, 0.08f, 0.05f); // Dark brown
-    glm::vec3 shirtColor = glm::vec3(0.9f, 0.1f, 0.1f); // Red shirt
-    glm::vec3 pantColor = glm::vec3(0.1f, 0.1f, 0.3f);  // Dark blue pants
-    glm::vec3 eyeWhiteColor = glm::vec3(0.95f, 0.95f, 0.95f);
-    glm::vec3 pupilColor = glm::vec3(0.1f, 0.1f, 0.1f);
+    // Realistic Colors
+    glm::vec3 skinColor = glm::vec3(0.88f, 0.72f, 0.62f); // Warmer, more natural skin
+    glm::vec3 hairColor = glm::vec3(0.12f, 0.09f, 0.05f); // Soft dark brown
+    glm::vec3 shirtColor = glm::vec3(0.8f, 0.15f, 0.15f); // Red shirt (less neon)
+    glm::vec3 pantColor = glm::vec3(0.15f, 0.18f, 0.35f); // Denim blue
+    glm::vec3 eyeWhiteColor = glm::vec3(0.98f, 0.98f, 0.98f);
     
     ProceduralHuman() {
         generateGeometry();
@@ -55,9 +54,9 @@ public:
         std::vector<float> eyeVerts;
         
         generateHead(skinVerts, hairVerts, eyeVerts);
-        generateBody(shirtVerts, skinVerts); // Neck is skin
-        generateArms(shirtVerts, skinVerts); // Sleeves shirt, arms skin
-        generateLegs(pantVerts); // Pants, shoes can be special
+        generateBody(shirtVerts, skinVerts);
+        generateArms(shirtVerts, skinVerts);
+        generateLegs(pantVerts);
         
         skinVAO = createVAO(skinVerts); skinCount = skinVerts.size()/8;
         shirtVAO = createVAO(shirtVerts); shirtCount = shirtVerts.size()/8;
@@ -71,75 +70,135 @@ public:
     // ============================================================
     
     void generateHead(std::vector<float>& skin, std::vector<float>& hair, std::vector<float>& eyes) {
-        // Skull
-        addSphere(skin, glm::vec3(0.0f, 0.0f, 0.0f), 0.12f);
-        // Jaw
-        addBox(skin, glm::vec3(0.0f, -0.1f, 0.02f), glm::vec3(0.14f, 0.1f, 0.15f));
-        // Nose
-        addBox(skin, glm::vec3(0.0f, -0.02f, 0.12f), glm::vec3(0.04f, 0.06f, 0.04f));
+        // Head Base (Cranium + Jaw)
+        // Upper head (Cranium)
+        addSphere(skin, glm::vec3(0.0f, 0.04f, -0.01f), 0.10f);
+        // Lower head (Jaw/Face) - blending into spherical cranium
+        addBox(skin, glm::vec3(0.0f, -0.06f, 0.02f), glm::vec3(0.14f, 0.12f, 0.14f));
+        // Chin
+        addBox(skin, glm::vec3(0.0f, -0.13f, 0.04f), glm::vec3(0.08f, 0.04f, 0.06f));
         
-        // Eyes
-        // Left
-        addSphere(eyes, glm::vec3(-0.04f, 0.02f, 0.105f), 0.025f);
-        // Right
-        addSphere(eyes, glm::vec3(0.04f, 0.02f, 0.105f), 0.025f);
-        // Pupils (simplified as part of eye mesh or we'd need another color batch. 
-        // For simplicity let's make eyes solid white/dark or mix vertices if we had color attribute. 
-        // Using Texture coordinates hack? No.
-        // I'll just render pupils as small black spheres in eye batch? No, they need different color transform.
-        // I'll put pupils in Hair batch (dark color) for efficiency/hack!
-        addSphere(hair, glm::vec3(-0.04f, 0.02f, 0.128f), 0.008f);
-        addSphere(hair, glm::vec3(0.04f, 0.02f, 0.128f), 0.008f);
+        // Face Features
+        // Nose (Bridge + Tip)
+        addBox(skin, glm::vec3(0.0f, -0.03f, 0.10f), glm::vec3(0.025f, 0.05f, 0.03f)); // Bridge
+        addBox(skin, glm::vec3(0.0f, -0.06f, 0.11f), glm::vec3(0.035f, 0.02f, 0.02f)); // Tip
+        
+        // Eyes (Smaller, more set-in)
+        float eyeY = 0.0f;
+        float eyeZ = 0.09f;
+        float eyeSpace = 0.035f;
+        
+        // Eye Sockets (Subtle brow ridge)
+        addBox(skin, glm::vec3(0.0f, 0.02f, 0.09f), glm::vec3(0.13f, 0.02f, 0.04f));
+        
+        // Eyeballs
+        addSphere(eyes, glm::vec3(-eyeSpace, eyeY, eyeZ), 0.012f);
+        addSphere(eyes, glm::vec3(eyeSpace, eyeY, eyeZ), 0.012f);
+        
+        // Pupils (Dark specks in Hair batch)
+        addSphere(hair, glm::vec3(-eyeSpace, eyeY, eyeZ + 0.01f), 0.005f);
+        addSphere(hair, glm::vec3(eyeSpace, eyeY, eyeZ + 0.01f), 0.005f);
+        
+        // Mouth (in Hair batch for dark color) -> Simple line
+        addBox(hair, glm::vec3(0.0f, -0.09f, 0.095f), glm::vec3(0.05f, 0.005f, 0.01f));
         
         // Ears
-        addSphere(skin, glm::vec3(-0.12f, 0.0f, 0.0f), 0.035f);
-        addSphere(skin, glm::vec3(0.12f, 0.0f, 0.0f), 0.035f);
+        addSphere(skin, glm::vec3(-0.11f, -0.02f, -0.02f), 0.025f);
+        addSphere(skin, glm::vec3(0.11f, -0.02f, -0.02f), 0.025f);
         
-        // Hair
-        addSphere(hair, glm::vec3(0.0f, 0.08f, -0.02f), 0.13f); // Top
-        addBox(hair, glm::vec3(0.0f, 0.0f, -0.08f), glm::vec3(0.25f, 0.25f, 0.1f)); // Back
+        // Hair (More detailed "helmet" but shaped)
+        // Top Main Mass
+        addSphere(hair, glm::vec3(0.0f, 0.08f, -0.02f), 0.11f);
+        // Back/Sides
+        addBox(hair, glm::vec3(0.0f, 0.02f, -0.08f), glm::vec3(0.22f, 0.18f, 0.08f));
+        // Sideburns
+        addBox(hair, glm::vec3(-0.11f, 0.0f, -0.02f), glm::vec3(0.02f, 0.08f, 0.04f));
+        addBox(hair, glm::vec3(0.11f, 0.0f, -0.02f), glm::vec3(0.02f, 0.08f, 0.04f));
+        // Bangs/Front
+        addBox(hair, glm::vec3(0.0f, 0.12f, 0.06f), glm::vec3(0.2f, 0.04f, 0.05f));
     }
     
     void generateBody(std::vector<float>& shirt, std::vector<float>& skin) {
-        // Torso
-        addBox(shirt, glm::vec3(0.0f, -0.35f, 0.0f), glm::vec3(0.4f, 0.55f, 0.25f));
         // Neck
-        addCylinder(skin, glm::vec3(0.0f, -0.1f, 0.0f), 0.06f, 0.1f);
+        addCylinder(skin, glm::vec3(0.0f, -0.15f, 0.0f), 0.055f, 0.12f);
+        
+        // Torso - Not just one box!
+        // Shoulders / Upper Chest
+        addBox(shirt, glm::vec3(0.0f, -0.25f, 0.0f), glm::vec3(0.45f, 0.15f, 0.20f));
+        // Mid Torso (slightly narrower)
+        addBox(shirt, glm::vec3(0.0f, -0.40f, 0.0f), glm::vec3(0.40f, 0.30f, 0.18f));
+        // Waist
+        addBox(shirt, glm::vec3(0.0f, -0.58f, 0.0f), glm::vec3(0.38f, 0.10f, 0.18f));
+        
         // Collar
-        addCylinder(shirt, glm::vec3(0.0f, -0.13f, 0.0f), 0.07f, 0.02f);
+        addCylinderRotated(shirt, glm::vec3(0.0f, -0.18f, 0.0f), 0.07f, 0.03f, glm::vec3(0,0,0));
     }
     
     void generateArms(std::vector<float>& shirt, std::vector<float>& skin) {
-        // Left Arm
-        addCylinderRotated(shirt, glm::vec3(-0.25f, -0.15f, 0.0f), 0.07f, 0.15f, glm::vec3(0, 0, 45));
-        addCylinderRotated(skin, glm::vec3(-0.35f, -0.3f, 0.1f), 0.05f, 0.35f, glm::vec3(30, 0, 20));
+        // Shoulder Joints (Spheres within shirt)
+        addSphere(shirt, glm::vec3(-0.25f, -0.25f, 0.0f), 0.09f);
+        addSphere(shirt, glm::vec3(0.25f, -0.25f, 0.0f), 0.09f);
         
-        // Left Hand
-        glm::vec3 handPosL(-0.35f, -0.45f, 0.25f);
-        addBox(skin, handPosL, glm::vec3(0.08f, 0.1f, 0.03f));
-        for(int i=0; i<5; i++) {
-           addCylinderRotated(skin, handPosL + glm::vec3(-0.03f + i*0.015f, -0.06f, 0.0f), 0.006f, 0.06f, glm::vec3(10, 0, 0));
-        }
+        // Left Arm
+        // Upper Arm (Shirt sleeve)
+        addCylinderRotated(shirt, glm::vec3(-0.32f, -0.28f, 0.0f), 0.06f, 0.20f, glm::vec3(0, 0, 30));
+        // Elbow Joint (Skin)
+        glm::vec3 elbowL(-0.40f, -0.38f, 0.0f);
+        addSphere(skin, elbowL, 0.05f);
+        // Forearm (Skin) - Resting on table
+        addCylinderRotated(skin, glm::vec3(-0.40f, -0.38f, 0.20f), 0.045f, 0.35f, glm::vec3(90, 0, 10)); // Horizontal forward
+        // Hand
+        generateHand(skin, glm::vec3(-0.36f, -0.38f, 0.42f), true); // Left hand
         
         // Right Arm
-        addCylinderRotated(shirt, glm::vec3(0.25f, -0.15f, 0.0f), 0.07f, 0.15f, glm::vec3(0, 0, -45));
-        addCylinderRotated(skin, glm::vec3(0.35f, -0.3f, 0.1f), 0.05f, 0.35f, glm::vec3(30, 0, -20));
+        // Upper Arm (Shirt sleeve)
+        addCylinderRotated(shirt, glm::vec3(0.32f, -0.28f, 0.0f), 0.06f, 0.20f, glm::vec3(0, 0, -30));
+        // Elbow Joint (Skin)
+        glm::vec3 elbowR(0.40f, -0.38f, 0.0f);
+        addSphere(skin, elbowR, 0.05f);
+        // Forearm (Skin) - Resting on table
+        addCylinderRotated(skin, glm::vec3(0.40f, -0.38f, 0.20f), 0.045f, 0.35f, glm::vec3(90, 0, -10)); // Horizontal forward
+        // Hand
+        generateHand(skin, glm::vec3(0.36f, -0.38f, 0.42f), false); // Right hand
+    }
+    
+    void generateHand(std::vector<float>& skin, glm::vec3 pos, bool isLeft) {
+        // Palm (Flattened box)
+        addBox(skin, pos, glm::vec3(0.08f, 0.03f, 0.09f));
         
-        // Right Hand
-        glm::vec3 handPosR(0.35f, -0.45f, 0.25f);
-        addBox(skin, handPosR, glm::vec3(0.08f, 0.1f, 0.03f));
-        for(int i=0; i<5; i++) {
-           addCylinderRotated(skin, handPosR + glm::vec3(-0.03f + i*0.015f, -0.06f, 0.0f), 0.006f, 0.06f, glm::vec3(10, 0, 0));
+        // Fingers (Resting flat)
+        for(int i=0; i<4; i++) {
+            float xOff = (isLeft ? -0.03f : 0.03f) + (i * (isLeft ? 0.02f : -0.02f));
+            addBox(skin, pos + glm::vec3(xOff, 0.0f, 0.08f), glm::vec3(0.018f, 0.02f, 0.07f));
         }
+        // Thumb
+        float thumbX = isLeft ? 0.05f : -0.05f;
+        addBox(skin, pos + glm::vec3(thumbX, 0.0f, 0.02f), glm::vec3(0.03f, 0.025f, 0.05f));
     }
     
     void generateLegs(std::vector<float>& pants) {
-        // Thighs
-        addCylinderRotated(pants, glm::vec3(-0.12f, -0.65f, 0.2f), 0.08f, 0.5f, glm::vec3(90, 0, 0));
-        addCylinderRotated(pants, glm::vec3(0.12f, -0.65f, 0.2f), 0.08f, 0.5f, glm::vec3(90, 0, 0));
-        // Lower legs
-        addCylinder(pants, glm::vec3(-0.12f, -0.9f, 0.45f), 0.07f, 0.45f);
-        addCylinder(pants, glm::vec3(0.12f, -0.9f, 0.45f), 0.07f, 0.45f);
+        // Hips/Pelvis (Connected to waist)
+        addBox(pants, glm::vec3(0.0f, -0.65f, 0.0f), glm::vec3(0.40f, 0.15f, 0.22f));
+        
+        // Thighs (Sitting horizontal)
+        addCylinderRotated(pants, glm::vec3(-0.12f, -0.70f, 0.25f), 0.10f, 0.45f, glm::vec3(90, 0, 5));
+        addCylinderRotated(pants, glm::vec3(0.12f, -0.70f, 0.25f), 0.10f, 0.45f, glm::vec3(90, 0, -5));
+        
+        // Knees
+        addSphere(pants, glm::vec3(-0.14f, -0.70f, 0.50f), 0.10f);
+        addSphere(pants, glm::vec3(0.14f, -0.70f, 0.50f), 0.10f);
+        
+        // Lower Legs (Vertical down)
+        addCylinderRotated(pants, glm::vec3(-0.14f, -0.95f, 0.50f), 0.08f, 0.45f, glm::vec3(0, 0, 0));
+        addCylinderRotated(pants, glm::vec3(0.14f, -0.95f, 0.50f), 0.08f, 0.45f, glm::vec3(0, 0, 0));
+        
+        // Shoes
+        glm::vec3 shoeColor(0.05f, 0.05f, 0.05f); // Need shoe batch? Assume shoes are pants color for now or simple hack?
+        // Actually, we don't have shoe color in render function.
+        // Let's just make them part of pants geometry but maybe add a distinct shape.
+        // Shoe Base
+        addBox(pants, glm::vec3(-0.14f, -1.20f, 0.55f), glm::vec3(0.12f, 0.08f, 0.25f));
+        addBox(pants, glm::vec3(0.14f, -1.20f, 0.55f), glm::vec3(0.12f, 0.08f, 0.25f));
     }
     
     // ============================================================
