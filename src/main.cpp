@@ -451,6 +451,31 @@ void setupLighting(Shader& shader)
                 lightIdx++;
             }
         }
+        // === ENTRANCE ROD LIGHTS (2 rod lights at entrance) ===
+        // These are vertical rod lights on both sides of the entrance
+        // Point lights 12 and 13 (index after ceiling lights)
+        shader.setInt("numPointLights", numLights + 2);
+        
+        // Left rod light
+        std::string rodLeft = "pointLights[12]";
+        shader.setVec3(rodLeft + ".position", glm::vec3(LOT_WIDTH/2 - 6.0f, 1.5f, LOT_DEPTH - 1.0f));
+        shader.setVec3(rodLeft + ".ambient", glm::vec3(0.15f, 0.12f, 0.08f));   // Warm ambient
+        shader.setVec3(rodLeft + ".diffuse", glm::vec3(1.3f, 1.0f, 0.7f));      // Warm golden diffuse
+        shader.setVec3(rodLeft + ".specular", glm::vec3(1.2f, 1.0f, 0.8f));     // Strong specular
+        shader.setFloat(rodLeft + ".constant", 1.0f);
+        shader.setFloat(rodLeft + ".linear", 0.14f);
+        shader.setFloat(rodLeft + ".quadratic", 0.07f);
+        
+        // Right rod light
+        std::string rodRight = "pointLights[13]";
+        shader.setVec3(rodRight + ".position", glm::vec3(LOT_WIDTH/2 + 6.0f, 1.5f, LOT_DEPTH - 1.0f));
+        shader.setVec3(rodRight + ".ambient", glm::vec3(0.15f, 0.12f, 0.08f));
+        shader.setVec3(rodRight + ".diffuse", glm::vec3(1.3f, 1.0f, 0.7f));
+        shader.setVec3(rodRight + ".specular", glm::vec3(1.2f, 1.0f, 0.8f));
+        shader.setFloat(rodRight + ".constant", 1.0f);
+        shader.setFloat(rodRight + ".linear", 0.14f);
+        shader.setFloat(rodRight + ".quadratic", 0.07f);
+        
     } else {
         // Lights OFF - only very dim ambient from windows
         shader.setVec3("dirLight.ambient", glm::vec3(0.03f, 0.035f, 0.04f));
@@ -1386,5 +1411,58 @@ void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVA
     drawLightPole(shader, cubeVAO, cylVAO, glm::vec3(-5.0f, 0.0f, LOT_DEPTH + 5.0f), 5.0f);
     drawLightPole(shader, cubeVAO, cylVAO, glm::vec3(LOT_WIDTH + 5.0f, 0.0f, LOT_DEPTH + 5.0f), 5.0f);
     drawLightPole(shader, cubeVAO, cylVAO, glm::vec3(LOT_WIDTH/2, 0.0f, LOT_DEPTH + 12.0f), 5.0f);
+    
+    // === ENTRANCE ROD LIGHTS ===
+    // Vertical rod lights on both sides of the entrance
+    // These create warm illumination with proper Phong shading
+    
+    glm::vec3 rodHousing(0.2f, 0.2f, 0.22f);      // Dark metal housing
+    glm::vec3 rodLightOn(1.0f, 0.85f, 0.55f);     // Warm golden glow when ON
+    glm::vec3 rodLightOff(0.15f, 0.12f, 0.1f);    // Dim when OFF
+    glm::vec3 rodLight = lightsOn ? rodLightOn : rodLightOff;
+    
+    float rodX1 = LOT_WIDTH/2 - 6.0f;
+    float rodX2 = LOT_WIDTH/2 + 6.0f;
+    float rodZ = LOT_DEPTH - 1.0f;
+    float rodHeight = 2.5f;
+    float rodRadius = 0.06f;
+    
+    // Left rod light fixture
+    // Base
+    drawCube(shader, cubeVAO, glm::vec3(rodX1, 0.1f, rodZ),
+             glm::vec3(0.2f, 0.2f, 0.2f), rodHousing, 3, 0.1f, 0.5f, 0.6f, 32.0f);
+    // Vertical pole
+    drawCube(shader, cubeVAO, glm::vec3(rodX1, rodHeight/2, rodZ),
+             glm::vec3(rodRadius * 2, rodHeight, rodRadius * 2), rodHousing, 3, 0.1f, 0.5f, 0.6f, 32.0f);
+    // Light tube (glowing) - facing INWARD toward parking lot
+    drawCube(shader, cubeVAO, glm::vec3(rodX1, rodHeight/2, rodZ - rodRadius * 3),
+             glm::vec3(rodRadius * 1.5f, rodHeight * 0.7f, rodRadius * 1.5f), rodLight, 1, 
+             lightsOn ? 0.9f : 0.15f, lightsOn ? 0.3f : 0.5f, lightsOn ? 0.1f : 0.3f, 8.0f);
+    // Top cap
+    drawCube(shader, cubeVAO, glm::vec3(rodX1, rodHeight + 0.05f, rodZ),
+             glm::vec3(0.15f, 0.1f, 0.15f), rodHousing, 3, 0.1f, 0.5f, 0.6f, 32.0f);
+    
+    // Right rod light fixture
+    // Base
+    drawCube(shader, cubeVAO, glm::vec3(rodX2, 0.1f, rodZ),
+             glm::vec3(0.2f, 0.2f, 0.2f), rodHousing, 3, 0.1f, 0.5f, 0.6f, 32.0f);
+    // Vertical pole
+    drawCube(shader, cubeVAO, glm::vec3(rodX2, rodHeight/2, rodZ),
+             glm::vec3(rodRadius * 2, rodHeight, rodRadius * 2), rodHousing, 3, 0.1f, 0.5f, 0.6f, 32.0f);
+    // Light tube (glowing) - facing INWARD toward parking lot
+    drawCube(shader, cubeVAO, glm::vec3(rodX2, rodHeight/2, rodZ - rodRadius * 3),
+             glm::vec3(rodRadius * 1.5f, rodHeight * 0.7f, rodRadius * 1.5f), rodLight, 1, 
+             lightsOn ? 0.9f : 0.15f, lightsOn ? 0.3f : 0.5f, lightsOn ? 0.1f : 0.3f, 8.0f);
+    // Top cap
+    drawCube(shader, cubeVAO, glm::vec3(rodX2, rodHeight + 0.05f, rodZ),
+             glm::vec3(0.15f, 0.1f, 0.15f), rodHousing, 3, 0.1f, 0.5f, 0.6f, 32.0f);
+    
+    // Ground light pools from rod lights (when ON)
+    if (lightsOn) {
+        glm::vec3 poolColor(1.0f, 0.85f, 0.55f);
+        drawCube(shader, cubeVAO, glm::vec3(rodX1, 0.015f, rodZ + 0.5f),
+                 glm::vec3(2.0f, 0.02f, 2.5f), poolColor * 0.2f, 1, 0.6f, 0.4f, 0.1f, 4.0f);
+        drawCube(shader, cubeVAO, glm::vec3(rodX2, 0.015f, rodZ + 0.5f),
+                 glm::vec3(2.0f, 0.02f, 2.5f), poolColor * 0.2f, 1, 0.6f, 0.4f, 0.1f, 4.0f);
+    }
 }
-

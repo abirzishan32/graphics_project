@@ -115,7 +115,10 @@ float calculateLightShaft(vec3 worldPos, vec3 windowPos, vec3 lightDir) {
 // Calculate total volumetric scattering from all windows
 vec3 calculateVolumetricScattering(vec3 worldPos) {
     vec3 scattering = vec3(0.0);
-    vec3 sunlightColor = vec3(1.0, 0.9, 0.65); // Warm golden sunlight
+    
+    // WARM GOLDEN SUNLIGHT - realistic afternoon sun color
+    // More saturated orange-gold for visible warmth
+    vec3 sunlightColor = vec3(1.0, 0.75, 0.4);
     
     // Sun ray direction (from window into the room)
     vec3 rayDir = normalize(sunDirection);
@@ -123,7 +126,7 @@ vec3 calculateVolumetricScattering(vec3 worldPos) {
     for (int i = 0; i < numWindows && i < MAX_WINDOWS; i++) {
         float shaftIntensity = calculateLightShaft(worldPos, windowPositions[i], rayDir);
         
-        // Accumulate light scattering
+        // Accumulate light scattering with warm coloring
         scattering += sunlightColor * shaftIntensity;
     }
     
