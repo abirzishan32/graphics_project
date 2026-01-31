@@ -19,13 +19,22 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
 unsigned int createCubeVAO();
 unsigned int createQuadVAO();
+unsigned int createCylinderVAO(int segments);
+unsigned int createWedgeVAO();
 void drawCube(Shader& shader, unsigned int VAO, glm::vec3 position, glm::vec3 scale, 
+              glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess);
+void drawCubeRotated(Shader& shader, unsigned int VAO, glm::vec3 position, glm::vec3 scale, glm::vec3 rotation,
+              glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess);
+void drawCylinder(Shader& shader, unsigned int VAO, int segments, glm::vec3 position, glm::vec3 scale,
               glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess);
 void drawQuad(Shader& shader, unsigned int VAO, glm::mat4 model, 
               glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess);
 void setupLighting(Shader& shader);
-void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO);
-void drawCar(Shader& shader, unsigned int cubeVAO, glm::vec3 position, glm::vec3 carColor);
+void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO);
+void drawRealisticCar(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, unsigned int wedgeVAO, glm::vec3 position, glm::vec3 carColor, float rotation);
+void drawTree(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, glm::vec3 position, float height, float spread);
+void drawOutdoorEnvironment(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO);
+void drawLightRays(Shader& shader, unsigned int cubeVAO);
 
 // Settings
 const unsigned int SCR_WIDTH = 1400;
@@ -81,8 +90,10 @@ int main()
         return -1;
     }
 
-    // Enable depth testing
+    // Enable depth testing and blending for light rays
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // Build and compile shader program
     Shader shader("pbrVertex.vs", "pbrFragment.fs");
@@ -90,6 +101,8 @@ int main()
     // Create geometry
     unsigned int cubeVAO = createCubeVAO();
     unsigned int quadVAO = createQuadVAO();
+    unsigned int cylVAO = createCylinderVAO(16);
+    unsigned int wedgeVAO = createWedgeVAO();
 
     // Render loop
     while (!glfwWindowShouldClose(window)) {
@@ -99,15 +112,15 @@ int main()
 
         processInput(window);
 
-        // Clear screen with dark gray (underground parking atmosphere)
-        glClearColor(0.02f, 0.02f, 0.03f, 1.0f);
+        // Clear screen with bright sky blue (daylight outside)
+        glClearColor(0.5f, 0.7f, 0.9f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         shader.use();
 
         // Set view/projection matrices
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), 
-                                                (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+                                                (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 200.0f);
         glm::mat4 view = camera.GetViewMatrix();
         shader.setMat4("projection", projection);
         shader.setMat4("view", view);
@@ -116,8 +129,11 @@ int main()
         // Setup lighting
         setupLighting(shader);
 
+        // Draw outdoor environment first
+        drawOutdoorEnvironment(shader, cubeVAO, quadVAO, cylVAO);
+
         // Draw the parking lot
-        drawParkingLot(shader, cubeVAO, quadVAO);
+        drawParkingLot(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -125,6 +141,8 @@ int main()
 
     glDeleteVertexArrays(1, &cubeVAO);
     glDeleteVertexArrays(1, &quadVAO);
+    glDeleteVertexArrays(1, &cylVAO);
+    glDeleteVertexArrays(1, &wedgeVAO);
     glfwTerminate();
     return 0;
 }
@@ -263,6 +281,103 @@ unsigned int createQuadVAO()
     return VAO;
 }
 
+unsigned int createCylinderVAO(int segments)
+{
+    std::vector<float> vertices;
+    float PI = 3.14159265359f;
+    
+    for (int i = 0; i < segments; i++) {
+        float angle1 = 2.0f * PI * i / segments;
+        float angle2 = 2.0f * PI * (i + 1) / segments;
+        float x1 = cos(angle1), z1 = sin(angle1);
+        float x2 = cos(angle2), z2 = sin(angle2);
+        
+        // Side quad (2 triangles)
+        // Triangle 1
+        vertices.insert(vertices.end(), {x1*0.5f, -0.5f, z1*0.5f, x1, 0.0f, z1, 0.0f, 0.0f});
+        vertices.insert(vertices.end(), {x2*0.5f, -0.5f, z2*0.5f, x2, 0.0f, z2, 1.0f, 0.0f});
+        vertices.insert(vertices.end(), {x2*0.5f,  0.5f, z2*0.5f, x2, 0.0f, z2, 1.0f, 1.0f});
+        // Triangle 2
+        vertices.insert(vertices.end(), {x2*0.5f,  0.5f, z2*0.5f, x2, 0.0f, z2, 1.0f, 1.0f});
+        vertices.insert(vertices.end(), {x1*0.5f,  0.5f, z1*0.5f, x1, 0.0f, z1, 0.0f, 1.0f});
+        vertices.insert(vertices.end(), {x1*0.5f, -0.5f, z1*0.5f, x1, 0.0f, z1, 0.0f, 0.0f});
+        
+        // Top cap
+        vertices.insert(vertices.end(), {0.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.5f, 0.5f});
+        vertices.insert(vertices.end(), {x1*0.5f, 0.5f, z1*0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f});
+        vertices.insert(vertices.end(), {x2*0.5f, 0.5f, z2*0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f});
+        
+        // Bottom cap
+        vertices.insert(vertices.end(), {0.0f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.5f, 0.5f});
+        vertices.insert(vertices.end(), {x2*0.5f, -0.5f, z2*0.5f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f});
+        vertices.insert(vertices.end(), {x1*0.5f, -0.5f, z1*0.5f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f});
+    }
+    
+    unsigned int VBO, VAO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    return VAO;
+}
+
+unsigned int createWedgeVAO()
+{
+    // Wedge/ramp shape for car hood/trunk slopes
+    float vertices[] = {
+        // Bottom face
+        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f, 0.0f,  0.0f, 0.0f,
+         0.5f, -0.5f, -0.5f,  0.0f, -1.0f, 0.0f,  1.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,  0.0f, -1.0f, 0.0f,  1.0f, 1.0f,
+         0.5f, -0.5f,  0.5f,  0.0f, -1.0f, 0.0f,  1.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, -1.0f, 0.0f,  0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f, 0.0f,  0.0f, 0.0f,
+        // Sloped top face (back high, front low)
+        -0.5f, -0.5f,  0.5f,  0.0f, 0.707f, 0.707f,  0.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,  0.0f, 0.707f, 0.707f,  1.0f, 0.0f,
+         0.5f,  0.5f, -0.5f,  0.0f, 0.707f, 0.707f,  1.0f, 1.0f,
+         0.5f,  0.5f, -0.5f,  0.0f, 0.707f, 0.707f,  1.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f, 0.707f, 0.707f,  0.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, 0.707f, 0.707f,  0.0f, 0.0f,
+        // Back face (high)
+        -0.5f, -0.5f, -0.5f,  0.0f, 0.0f, -1.0f,  0.0f, 0.0f,
+         0.5f, -0.5f, -0.5f,  0.0f, 0.0f, -1.0f,  1.0f, 0.0f,
+         0.5f,  0.5f, -0.5f,  0.0f, 0.0f, -1.0f,  1.0f, 1.0f,
+         0.5f,  0.5f, -0.5f,  0.0f, 0.0f, -1.0f,  1.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f, 0.0f, -1.0f,  0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, 0.0f, -1.0f,  0.0f, 0.0f,
+        // Left side
+        -0.5f, -0.5f, -0.5f, -1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
+        -0.5f,  0.5f, -0.5f, -1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f, -1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
+        // Right side
+         0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
+    };
+    
+    unsigned int VBO, VAO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    return VAO;
+}
+
 void setupLighting(Shader& shader)
 {
     // Directional light (sunlight through windows) - coming from right side
@@ -316,6 +431,46 @@ void drawCube(Shader& shader, unsigned int VAO, glm::vec3 position, glm::vec3 sc
     glDrawArrays(GL_TRIANGLES, 0, 36);
 }
 
+void drawCubeRotated(Shader& shader, unsigned int VAO, glm::vec3 position, glm::vec3 scale, glm::vec3 rotation,
+              glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess)
+{
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, position);
+    model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+    model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+    model = glm::scale(model, scale);
+    shader.setMat4("model", model);
+    shader.setVec3("objectColor", color);
+    shader.setInt("textureType", texType);
+    shader.setFloat("ambientStrength", ambient);
+    shader.setFloat("diffuseStrength", diffuse);
+    shader.setFloat("specularStrength", specular);
+    shader.setFloat("shininess", shininess);
+    
+    glBindVertexArray(VAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+}
+
+void drawCylinder(Shader& shader, unsigned int VAO, int segments, glm::vec3 position, glm::vec3 scale,
+              glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess)
+{
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, position);
+    model = glm::rotate(model, glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)); // Rotate to lay flat
+    model = glm::scale(model, scale);
+    shader.setMat4("model", model);
+    shader.setVec3("objectColor", color);
+    shader.setInt("textureType", texType);
+    shader.setFloat("ambientStrength", ambient);
+    shader.setFloat("diffuseStrength", diffuse);
+    shader.setFloat("specularStrength", specular);
+    shader.setFloat("shininess", shininess);
+    
+    glBindVertexArray(VAO);
+    glDrawArrays(GL_TRIANGLES, 0, segments * 12);
+}
+
 void drawQuad(Shader& shader, unsigned int VAO, glm::mat4 model, 
               glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess)
 {
@@ -331,49 +486,164 @@ void drawQuad(Shader& shader, unsigned int VAO, glm::mat4 model,
     glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
-void drawCar(Shader& shader, unsigned int cubeVAO, glm::vec3 position, glm::vec3 carColor)
+void drawRealisticCar(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, unsigned int wedgeVAO, 
+                      glm::vec3 position, glm::vec3 carColor, float rotation)
 {
-    // Car body (main)
-    drawCube(shader, cubeVAO, 
-             glm::vec3(position.x, position.y + 0.5f, position.z),
-             glm::vec3(1.8f, 0.6f, 4.2f), carColor, 2, 0.15f, 0.8f, 0.9f, 64.0f);
+    // Realistic sedan proportions based on car design principles:
+    // Wheelbase ~2.7m, total length ~4.5m, width ~1.8m, height ~1.4m
+    // Wheel diameter ~0.65m
     
-    // Car top (cabin)
-    drawCube(shader, cubeVAO,
-             glm::vec3(position.x, position.y + 1.0f, position.z - 0.3f),
-             glm::vec3(1.6f, 0.5f, 2.2f), carColor * 0.9f, 2, 0.15f, 0.8f, 0.9f, 64.0f);
+    float baseY = position.y;
+    float wheelRadius = 0.325f;
+    float wheelWidth = 0.22f;
+    float wheelbase = 2.7f;
+    float bodyWidth = 1.8f;
+    float bodyLength = 4.5f;
     
-    // Windows (glass)
-    drawCube(shader, cubeVAO,
-             glm::vec3(position.x, position.y + 1.0f, position.z - 0.3f),
-             glm::vec3(1.65f, 0.4f, 2.0f), glm::vec3(0.1f, 0.15f, 0.2f), 4, 0.1f, 0.3f, 1.0f, 128.0f);
+    // Wheel positions (centered on axles)
+    float frontAxleZ = position.z + wheelbase/2 - 0.3f;
+    float rearAxleZ = position.z - wheelbase/2 + 0.3f;
+    float wheelY = baseY + wheelRadius;
+    float wheelX = bodyWidth/2 - 0.1f;
     
-    // Wheels (4)
-    glm::vec3 wheelColor(0.1f, 0.1f, 0.1f);
-    float wheelY = position.y + 0.25f;
-    drawCube(shader, cubeVAO, glm::vec3(position.x - 0.7f, wheelY, position.z + 1.2f),
-             glm::vec3(0.3f, 0.5f, 0.5f), wheelColor, 3, 0.1f, 0.6f, 0.3f, 16.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x + 0.7f, wheelY, position.z + 1.2f),
-             glm::vec3(0.3f, 0.5f, 0.5f), wheelColor, 3, 0.1f, 0.6f, 0.3f, 16.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x - 0.7f, wheelY, position.z - 1.2f),
-             glm::vec3(0.3f, 0.5f, 0.5f), wheelColor, 3, 0.1f, 0.6f, 0.3f, 16.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x + 0.7f, wheelY, position.z - 1.2f),
-             glm::vec3(0.3f, 0.5f, 0.5f), wheelColor, 3, 0.1f, 0.6f, 0.3f, 16.0f);
+    // === WHEELS (Cylinders for realism) ===
+    glm::vec3 tireColor(0.15f, 0.15f, 0.15f);
+    glm::vec3 rimColor(0.7f, 0.7f, 0.75f);
     
-    // Headlights
-    drawCube(shader, cubeVAO, glm::vec3(position.x - 0.6f, position.y + 0.5f, position.z + 2.1f),
-             glm::vec3(0.3f, 0.2f, 0.05f), glm::vec3(1.0f, 0.95f, 0.8f), 4, 0.5f, 0.5f, 1.0f, 64.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x + 0.6f, position.y + 0.5f, position.z + 2.1f),
-             glm::vec3(0.3f, 0.2f, 0.05f), glm::vec3(1.0f, 0.95f, 0.8f), 4, 0.5f, 0.5f, 1.0f, 64.0f);
+    // Front left wheel
+    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x - wheelX, wheelY, frontAxleZ),
+                 glm::vec3(wheelWidth, wheelRadius*2, wheelRadius*2), tireColor, 3, 0.1f, 0.5f, 0.2f, 8.0f);
+    // Rim
+    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x - wheelX - 0.02f, wheelY, frontAxleZ),
+                 glm::vec3(0.05f, wheelRadius*1.4f, wheelRadius*1.4f), rimColor, 3, 0.2f, 0.7f, 0.9f, 64.0f);
     
-    // Taillights
-    drawCube(shader, cubeVAO, glm::vec3(position.x - 0.6f, position.y + 0.5f, position.z - 2.1f),
-             glm::vec3(0.25f, 0.15f, 0.05f), glm::vec3(0.8f, 0.1f, 0.1f), 4, 0.3f, 0.6f, 0.8f, 32.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x + 0.6f, position.y + 0.5f, position.z - 2.1f),
-             glm::vec3(0.25f, 0.15f, 0.05f), glm::vec3(0.8f, 0.1f, 0.1f), 4, 0.3f, 0.6f, 0.8f, 32.0f);
+    // Front right wheel
+    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x + wheelX, wheelY, frontAxleZ),
+                 glm::vec3(wheelWidth, wheelRadius*2, wheelRadius*2), tireColor, 3, 0.1f, 0.5f, 0.2f, 8.0f);
+    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x + wheelX + 0.02f, wheelY, frontAxleZ),
+                 glm::vec3(0.05f, wheelRadius*1.4f, wheelRadius*1.4f), rimColor, 3, 0.2f, 0.7f, 0.9f, 64.0f);
+    
+    // Rear left wheel
+    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x - wheelX, wheelY, rearAxleZ),
+                 glm::vec3(wheelWidth, wheelRadius*2, wheelRadius*2), tireColor, 3, 0.1f, 0.5f, 0.2f, 8.0f);
+    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x - wheelX - 0.02f, wheelY, rearAxleZ),
+                 glm::vec3(0.05f, wheelRadius*1.4f, wheelRadius*1.4f), rimColor, 3, 0.2f, 0.7f, 0.9f, 64.0f);
+    
+    // Rear right wheel
+    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x + wheelX, wheelY, rearAxleZ),
+                 glm::vec3(wheelWidth, wheelRadius*2, wheelRadius*2), tireColor, 3, 0.1f, 0.5f, 0.2f, 8.0f);
+    drawCylinder(shader, cylVAO, 16, glm::vec3(position.x + wheelX + 0.02f, wheelY, rearAxleZ),
+                 glm::vec3(0.05f, wheelRadius*1.4f, wheelRadius*1.4f), rimColor, 3, 0.2f, 0.7f, 0.9f, 64.0f);
+    
+    // === LOWER BODY (main body shell) ===
+    float lowerBodyHeight = 0.45f;
+    float lowerBodyY = baseY + wheelRadius + lowerBodyHeight/2;
+    
+    // Main lower body
+    drawCube(shader, cubeVAO, glm::vec3(position.x, lowerBodyY, position.z),
+             glm::vec3(bodyWidth, lowerBodyHeight, bodyLength - 0.4f), carColor, 2, 0.15f, 0.8f, 0.9f, 64.0f);
+    
+    // Front bumper
+    drawCube(shader, cubeVAO, glm::vec3(position.x, lowerBodyY - 0.1f, position.z + bodyLength/2 - 0.15f),
+             glm::vec3(bodyWidth + 0.05f, 0.25f, 0.3f), carColor * 0.95f, 2, 0.15f, 0.8f, 0.85f, 48.0f);
+    
+    // Rear bumper
+    drawCube(shader, cubeVAO, glm::vec3(position.x, lowerBodyY - 0.1f, position.z - bodyLength/2 + 0.15f),
+             glm::vec3(bodyWidth + 0.05f, 0.25f, 0.3f), carColor * 0.95f, 2, 0.15f, 0.8f, 0.85f, 48.0f);
+    
+    // === WHEEL ARCHES (fenders) ===
+    glm::vec3 archColor = carColor * 0.92f;
+    // Front left
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x - bodyWidth/2 + 0.08f, wheelY + 0.2f, frontAxleZ),
+             glm::vec3(0.15f, 0.4f, 0.7f), glm::vec3(0, 0, 0), archColor, 2, 0.15f, 0.75f, 0.8f, 48.0f);
+    // Front right
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x + bodyWidth/2 - 0.08f, wheelY + 0.2f, frontAxleZ),
+             glm::vec3(0.15f, 0.4f, 0.7f), glm::vec3(0, 0, 0), archColor, 2, 0.15f, 0.75f, 0.8f, 48.0f);
+    // Rear left
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x - bodyWidth/2 + 0.08f, wheelY + 0.2f, rearAxleZ),
+             glm::vec3(0.15f, 0.4f, 0.7f), glm::vec3(0, 0, 0), archColor, 2, 0.15f, 0.75f, 0.8f, 48.0f);
+    // Rear right
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x + bodyWidth/2 - 0.08f, wheelY + 0.2f, rearAxleZ),
+             glm::vec3(0.15f, 0.4f, 0.7f), glm::vec3(0, 0, 0), archColor, 2, 0.15f, 0.75f, 0.8f, 48.0f);
+    
+    // === HOOD (sloped front) ===
+    float hoodY = lowerBodyY + lowerBodyHeight/2 + 0.1f;
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x, hoodY, position.z + 1.2f),
+             glm::vec3(bodyWidth - 0.1f, 0.15f, 1.3f), glm::vec3(-8, 0, 0), carColor, 2, 0.15f, 0.85f, 0.95f, 80.0f);
+    
+    // === CABIN (greenhouse) ===
+    float cabinWidth = bodyWidth - 0.25f;
+    float cabinHeight = 0.55f;
+    float cabinLength = 1.8f;
+    float cabinY = hoodY + cabinHeight/2 + 0.05f;
+    float cabinZ = position.z - 0.2f;
+    
+    // A-pillar slope (windshield frame)
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x, cabinY, cabinZ + cabinLength/2 - 0.1f),
+             glm::vec3(cabinWidth, cabinHeight, 0.1f), glm::vec3(-25, 0, 0), carColor * 0.85f, 2, 0.12f, 0.7f, 0.8f, 48.0f);
+    
+    // Main cabin
+    drawCube(shader, cubeVAO, glm::vec3(position.x, cabinY, cabinZ),
+             glm::vec3(cabinWidth, cabinHeight, cabinLength - 0.3f), carColor * 0.9f, 2, 0.12f, 0.75f, 0.85f, 56.0f);
+    
+    // C-pillar (rear)
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x, cabinY, cabinZ - cabinLength/2 + 0.1f),
+             glm::vec3(cabinWidth, cabinHeight, 0.1f), glm::vec3(20, 0, 0), carColor * 0.85f, 2, 0.12f, 0.7f, 0.8f, 48.0f);
+    
+    // === WINDOWS (glass) ===
+    glm::vec3 glassColor(0.08f, 0.12f, 0.18f);
+    // Windshield
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x, cabinY + 0.05f, cabinZ + cabinLength/2 - 0.2f),
+             glm::vec3(cabinWidth - 0.15f, cabinHeight - 0.15f, 0.05f), glm::vec3(-30, 0, 0), 
+             glassColor, 4, 0.05f, 0.2f, 1.0f, 128.0f);
+    // Rear window
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x, cabinY + 0.05f, cabinZ - cabinLength/2 + 0.25f),
+             glm::vec3(cabinWidth - 0.15f, cabinHeight - 0.15f, 0.05f), glm::vec3(25, 0, 0),
+             glassColor, 4, 0.05f, 0.2f, 1.0f, 128.0f);
+    // Side windows
+    drawCube(shader, cubeVAO, glm::vec3(position.x - cabinWidth/2 + 0.02f, cabinY + 0.08f, cabinZ),
+             glm::vec3(0.03f, cabinHeight - 0.2f, cabinLength - 0.5f), glassColor, 4, 0.05f, 0.2f, 1.0f, 128.0f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x + cabinWidth/2 - 0.02f, cabinY + 0.08f, cabinZ),
+             glm::vec3(0.03f, cabinHeight - 0.2f, cabinLength - 0.5f), glassColor, 4, 0.05f, 0.2f, 1.0f, 128.0f);
+    
+    // === TRUNK (rear deck) ===
+    float trunkY = lowerBodyY + lowerBodyHeight/2 + 0.08f;
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x, trunkY, position.z - 1.5f),
+             glm::vec3(bodyWidth - 0.1f, 0.12f, 1.0f), glm::vec3(5, 0, 0), carColor, 2, 0.15f, 0.85f, 0.95f, 80.0f);
+    
+    // === HEADLIGHTS ===
+    glm::vec3 headlightColor(0.95f, 0.95f, 0.85f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x - 0.55f, lowerBodyY + 0.1f, position.z + bodyLength/2 - 0.02f),
+             glm::vec3(0.35f, 0.18f, 0.08f), headlightColor, 4, 0.7f, 0.4f, 1.0f, 96.0f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x + 0.55f, lowerBodyY + 0.1f, position.z + bodyLength/2 - 0.02f),
+             glm::vec3(0.35f, 0.18f, 0.08f), headlightColor, 4, 0.7f, 0.4f, 1.0f, 96.0f);
+    
+    // === TAILLIGHTS ===
+    glm::vec3 taillightColor(0.85f, 0.1f, 0.1f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x - 0.6f, lowerBodyY + 0.1f, position.z - bodyLength/2 + 0.02f),
+             glm::vec3(0.3f, 0.12f, 0.06f), taillightColor, 4, 0.5f, 0.5f, 0.8f, 48.0f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x + 0.6f, lowerBodyY + 0.1f, position.z - bodyLength/2 + 0.02f),
+             glm::vec3(0.3f, 0.12f, 0.06f), taillightColor, 4, 0.5f, 0.5f, 0.8f, 48.0f);
+    
+    // === GRILLE ===
+    drawCube(shader, cubeVAO, glm::vec3(position.x, lowerBodyY, position.z + bodyLength/2 - 0.02f),
+             glm::vec3(0.6f, 0.2f, 0.05f), glm::vec3(0.12f, 0.12f, 0.14f), 3, 0.1f, 0.4f, 0.6f, 32.0f);
+    
+    // === SIDE MIRRORS ===
+    drawCube(shader, cubeVAO, glm::vec3(position.x - bodyWidth/2 - 0.08f, cabinY - 0.1f, cabinZ + 0.6f),
+             glm::vec3(0.08f, 0.06f, 0.12f), carColor * 0.9f, 2, 0.15f, 0.7f, 0.8f, 48.0f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x + bodyWidth/2 + 0.08f, cabinY - 0.1f, cabinZ + 0.6f),
+             glm::vec3(0.08f, 0.06f, 0.12f), carColor * 0.9f, 2, 0.15f, 0.7f, 0.8f, 48.0f);
+    
+    // === DOOR HANDLES ===
+    drawCube(shader, cubeVAO, glm::vec3(position.x - bodyWidth/2 + 0.02f, lowerBodyY + 0.15f, cabinZ + 0.3f),
+             glm::vec3(0.02f, 0.03f, 0.12f), glm::vec3(0.7f, 0.7f, 0.72f), 3, 0.2f, 0.6f, 0.9f, 64.0f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x + bodyWidth/2 - 0.02f, lowerBodyY + 0.15f, cabinZ + 0.3f),
+             glm::vec3(0.02f, 0.03f, 0.12f), glm::vec3(0.7f, 0.7f, 0.72f), 3, 0.2f, 0.6f, 0.9f, 64.0f);
 }
 
-void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO)
+
+void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO)
 {
     glm::vec3 concreteColor(0.45f, 0.43f, 0.40f);
     glm::vec3 ceilingColor(0.35f, 0.33f, 0.30f);
@@ -561,23 +831,178 @@ void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO)
     };
     
     // Cars in left row
-    drawCar(shader, cubeVAO, glm::vec3(spotStartX, 0.0f, 6.5f), carColors[0]);
-    drawCar(shader, cubeVAO, glm::vec3(spotStartX, 0.0f, 12.0f), carColors[1]);
-    drawCar(shader, cubeVAO, glm::vec3(spotStartX, 0.0f, 23.0f), carColors[2]);
-    drawCar(shader, cubeVAO, glm::vec3(spotStartX, 0.0f, 28.5f), carColors[3]);
+    drawRealisticCar(shader, cubeVAO, cylVAO, wedgeVAO, glm::vec3(spotStartX, 0.0f, 6.5f), carColors[0], 0);
+    drawRealisticCar(shader, cubeVAO, cylVAO, wedgeVAO, glm::vec3(spotStartX, 0.0f, 12.0f), carColors[1], 0);
+    drawRealisticCar(shader, cubeVAO, cylVAO, wedgeVAO, glm::vec3(spotStartX, 0.0f, 23.0f), carColors[2], 0);
+    drawRealisticCar(shader, cubeVAO, cylVAO, wedgeVAO, glm::vec3(spotStartX, 0.0f, 28.5f), carColors[3], 0);
     
     // Cars in right row  
-    drawCar(shader, cubeVAO, glm::vec3(spotStartX2, 0.0f, 6.5f), carColors[4]);
-    drawCar(shader, cubeVAO, glm::vec3(spotStartX2, 0.0f, 17.5f), carColors[5]);
-    drawCar(shader, cubeVAO, glm::vec3(spotStartX2, 0.0f, 28.5f), carColors[0]);
+    drawRealisticCar(shader, cubeVAO, cylVAO, wedgeVAO, glm::vec3(spotStartX2, 0.0f, 6.5f), carColors[4], 0);
+    drawRealisticCar(shader, cubeVAO, cylVAO, wedgeVAO, glm::vec3(spotStartX2, 0.0f, 17.5f), carColors[5], 0);
+    drawRealisticCar(shader, cubeVAO, cylVAO, wedgeVAO, glm::vec3(spotStartX2, 0.0f, 28.5f), carColors[0], 0);
     
     // Cars in middle row
-    drawCar(shader, cubeVAO, glm::vec3(middleX - SPOT_WIDTH/2 - 0.5f, 0.0f, 8.5f), carColors[2]);
-    drawCar(shader, cubeVAO, glm::vec3(middleX + SPOT_WIDTH/2 + 0.5f, 0.0f, 14.0f), carColors[1]);
-    drawCar(shader, cubeVAO, glm::vec3(middleX - SPOT_WIDTH/2 - 0.5f, 0.0f, 25.0f), carColors[4]);
+    drawRealisticCar(shader, cubeVAO, cylVAO, wedgeVAO, glm::vec3(middleX - SPOT_WIDTH/2 - 0.5f, 0.0f, 8.5f), carColors[2], 0);
+    drawRealisticCar(shader, cubeVAO, cylVAO, wedgeVAO, glm::vec3(middleX + SPOT_WIDTH/2 + 0.5f, 0.0f, 14.0f), carColors[1], 0);
+    drawRealisticCar(shader, cubeVAO, cylVAO, wedgeVAO, glm::vec3(middleX - SPOT_WIDTH/2 - 0.5f, 0.0f, 25.0f), carColors[4], 0);
     
     // === EXIT/ENTRANCE SIGNS ===
     // Exit sign above entrance
     drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH/2, 2.8f, LOT_DEPTH - 0.5f),
              glm::vec3(1.5f, 0.4f, 0.1f), glm::vec3(0.1f, 0.6f, 0.2f), 1, 0.6f, 0.5f, 0.3f, 16.0f);
+}
+
+// Draw a procedural tree with trunk and foliage layers
+void drawTree(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, glm::vec3 position, float height, float spread)
+{
+    // Trunk - tapered cylinder approximated with cubes
+    glm::vec3 trunkColor(0.35f, 0.22f, 0.12f);
+    float trunkHeight = height * 0.4f;
+    float trunkRadius = height * 0.08f;
+    
+    // Main trunk
+    drawCube(shader, cubeVAO, glm::vec3(position.x, position.y + trunkHeight/2, position.z),
+             glm::vec3(trunkRadius * 2, trunkHeight, trunkRadius * 2), trunkColor, 0, 0.1f, 0.6f, 0.15f, 8.0f);
+    
+    // Foliage - multiple layers of green "clouds"
+    glm::vec3 leafColors[] = {
+        glm::vec3(0.15f, 0.45f, 0.12f),  // Dark green
+        glm::vec3(0.2f, 0.55f, 0.15f),   // Medium green
+        glm::vec3(0.25f, 0.6f, 0.18f)    // Light green
+    };
+    
+    float foliageY = position.y + trunkHeight;
+    float layerHeight = height * 0.2f;
+    
+    // Bottom layer (widest)
+    drawCube(shader, cubeVAO, glm::vec3(position.x, foliageY + layerHeight * 0.5f, position.z),
+             glm::vec3(spread * 1.2f, layerHeight, spread * 1.2f), leafColors[0], 0, 0.15f, 0.65f, 0.1f, 4.0f);
+    
+    // Middle layer
+    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.1f, foliageY + layerHeight * 1.3f, position.z - spread * 0.1f),
+             glm::vec3(spread * 1.0f, layerHeight * 0.9f, spread * 1.0f), leafColors[1], 0, 0.15f, 0.65f, 0.1f, 4.0f);
+    
+    // Top layer (narrowest)
+    drawCube(shader, cubeVAO, glm::vec3(position.x - spread * 0.05f, foliageY + layerHeight * 2.0f, position.z + spread * 0.05f),
+             glm::vec3(spread * 0.7f, layerHeight * 0.8f, spread * 0.7f), leafColors[2], 0, 0.15f, 0.65f, 0.1f, 4.0f);
+    
+    // Add some irregular shapes for realism
+    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.3f, foliageY + layerHeight * 0.8f, position.z + spread * 0.2f),
+             glm::vec3(spread * 0.5f, layerHeight * 0.6f, spread * 0.5f), leafColors[0], 0, 0.15f, 0.65f, 0.1f, 4.0f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x - spread * 0.25f, foliageY + layerHeight * 1.5f, position.z - spread * 0.3f),
+             glm::vec3(spread * 0.45f, layerHeight * 0.5f, spread * 0.4f), leafColors[1], 0, 0.15f, 0.65f, 0.1f, 4.0f);
+}
+
+// Draw the outdoor environment: road, ground, sky, trees
+void drawOutdoorEnvironment(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO)
+{
+    // === GROUND OUTSIDE (grass) ===
+    glm::vec3 grassColor(0.25f, 0.42f, 0.18f);
+    glm::mat4 groundModel = glm::mat4(1.0f);
+    groundModel = glm::translate(groundModel, glm::vec3(LOT_WIDTH/2, -0.05f, LOT_DEPTH + 50.0f));
+    groundModel = glm::scale(groundModel, glm::vec3(150.0f, 1.0f, 120.0f));
+    drawQuad(shader, quadVAO, groundModel, grassColor, 0, 0.2f, 0.7f, 0.1f, 4.0f);
+    
+    // === ROAD in front of parking lot entrance ===
+    glm::vec3 asphaltColor(0.18f, 0.18f, 0.2f);
+    glm::mat4 roadModel = glm::mat4(1.0f);
+    roadModel = glm::translate(roadModel, glm::vec3(LOT_WIDTH/2, 0.01f, LOT_DEPTH + 8.0f));
+    roadModel = glm::scale(roadModel, glm::vec3(30.0f, 1.0f, 12.0f));
+    drawQuad(shader, quadVAO, roadModel, asphaltColor, 0, 0.12f, 0.5f, 0.2f, 16.0f);
+    
+    // Road markings (center line)
+    glm::vec3 roadLineColor(0.95f, 0.9f, 0.7f);
+    for (int i = 0; i < 6; i++) {
+        float lineZ = LOT_DEPTH + 4.0f + i * 2.5f;
+        drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH/2, 0.02f, lineZ),
+                 glm::vec3(1.5f, 0.02f, 0.15f), roadLineColor, 1, 0.4f, 0.8f, 0.3f, 16.0f);
+    }
+    
+    // Sidewalk/curb
+    glm::vec3 sidewalkColor(0.55f, 0.53f, 0.5f);
+    drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH/2, 0.08f, LOT_DEPTH + 15.0f),
+             glm::vec3(35.0f, 0.15f, 3.0f), sidewalkColor, 0, 0.18f, 0.65f, 0.15f, 12.0f);
+    
+    // === TREES along the road ===
+    // Variety of tree sizes for realism
+    float treePositions[][4] = {
+        // x, z, height, spread
+        {5.0f, LOT_DEPTH + 20.0f, 6.0f, 3.5f},
+        {15.0f, LOT_DEPTH + 22.0f, 8.0f, 4.5f},
+        {25.0f, LOT_DEPTH + 19.0f, 5.5f, 3.0f},
+        {38.0f, LOT_DEPTH + 21.0f, 7.5f, 4.0f},
+        {48.0f, LOT_DEPTH + 23.0f, 9.0f, 5.0f},
+        {55.0f, LOT_DEPTH + 18.0f, 6.5f, 3.8f},
+        // Trees further back
+        {8.0f, LOT_DEPTH + 35.0f, 10.0f, 5.5f},
+        {22.0f, LOT_DEPTH + 40.0f, 8.5f, 4.8f},
+        {40.0f, LOT_DEPTH + 38.0f, 11.0f, 6.0f},
+        {52.0f, LOT_DEPTH + 42.0f, 7.0f, 4.2f},
+    };
+    
+    for (int i = 0; i < 10; i++) {
+        drawTree(shader, cubeVAO, cylVAO, 
+                 glm::vec3(treePositions[i][0], 0.0f, treePositions[i][1]),
+                 treePositions[i][2], treePositions[i][3]);
+    }
+    
+    // === SKY BACKDROP (distant) ===
+    glm::vec3 skyColor(0.55f, 0.75f, 0.95f);
+    drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH/2, 30.0f, LOT_DEPTH + 80.0f),
+             glm::vec3(200.0f, 60.0f, 1.0f), skyColor, 1, 0.9f, 0.3f, 0.0f, 1.0f);
+    
+    // === DISTANT BUILDINGS silhouette ===
+    glm::vec3 buildingColor(0.4f, 0.42f, 0.45f);
+    drawCube(shader, cubeVAO, glm::vec3(15.0f, 8.0f, LOT_DEPTH + 60.0f),
+             glm::vec3(12.0f, 16.0f, 8.0f), buildingColor, 0, 0.15f, 0.5f, 0.3f, 24.0f);
+    drawCube(shader, cubeVAO, glm::vec3(35.0f, 12.0f, LOT_DEPTH + 65.0f),
+             glm::vec3(10.0f, 24.0f, 8.0f), buildingColor * 0.9f, 0, 0.15f, 0.5f, 0.3f, 24.0f);
+    drawCube(shader, cubeVAO, glm::vec3(50.0f, 6.0f, LOT_DEPTH + 55.0f),
+             glm::vec3(14.0f, 12.0f, 10.0f), buildingColor * 1.1f, 0, 0.15f, 0.5f, 0.3f, 24.0f);
+}
+
+// Draw volumetric light rays coming through windows
+void drawLightRays(Shader& shader, unsigned int cubeVAO)
+{
+    // Light rays are semi-transparent stretched cubes angled from windows
+    // They simulate god rays / volumetric light scattering
+    
+    glm::vec3 rayColor(1.0f, 0.95f, 0.8f);  // Warm sunlight color
+    float rayAlpha = 0.08f;  // Very subtle
+    
+    // Window positions along left wall (X = 0)
+    float windowSpacing = 8.0f;
+    float windowY = 2.5f;  // Middle height of window
+    
+    for (float z = 5.0f; z < LOT_DEPTH - 5.0f; z += windowSpacing) {
+        // Each window casts a light ray into the parking lot
+        // Ray extends from window toward the interior at an angle
+        
+        float rayLength = 15.0f;
+        float rayWidth = 2.5f;
+        float rayHeight = 2.0f;
+        
+        // Position ray center (extending from window into parking lot)
+        float rayX = rayLength / 2.5f;
+        float rayZ = z;
+        float rayY = windowY - 0.8f;  // Rays angle downward
+        
+        // Draw multiple overlapping rays for softer appearance
+        for (int layer = 0; layer < 3; layer++) {
+            float layerOffset = layer * 0.3f;
+            float layerScale = 1.0f - layer * 0.15f;
+            
+            drawCubeRotated(shader, cubeVAO, 
+                           glm::vec3(rayX + layerOffset, rayY - layer * 0.4f, rayZ),
+                           glm::vec3(rayLength * layerScale, rayHeight * layerScale * 0.5f, rayWidth * layerScale),
+                           glm::vec3(25.0f, 0.0f, 0.0f),  // Angled downward
+                           rayColor * (0.15f - layer * 0.03f), 1, 0.9f, 0.1f, 0.0f, 1.0f);
+        }
+        
+        // Ground light pool (where ray hits floor)
+        float poolX = rayLength * 0.8f;
+        float poolZ = z;
+        drawCube(shader, cubeVAO, glm::vec3(poolX, 0.02f, poolZ),
+                 glm::vec3(4.0f, 0.02f, 3.5f), rayColor * 0.2f, 1, 0.7f, 0.3f, 0.0f, 1.0f);
+    }
 }

@@ -1,2 +1,6 @@
-/.DS_Store
-/.vscode
+.DS_Store
+.vscode/
+shopping_mall
+shopping_mall.dSYM/
+*.o
+glad.o
