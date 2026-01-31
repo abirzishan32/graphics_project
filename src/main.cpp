@@ -35,6 +35,13 @@ void drawRealisticCar(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO,
 void drawTree(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, glm::vec3 position, float height, float spread);
 void drawOutdoorEnvironment(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO);
 void drawLightRays(Shader& shader, unsigned int cubeVAO);
+void drawStopSign(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float rotation);
+void drawSafetyBollard(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, glm::vec3 position);
+void drawLightPole(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, glm::vec3 position, float height);
+void drawStopStencil(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float rotation);
+void drawDirectionalArrow(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float rotation);
+void drawSpeedBump(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float width);
+void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO);
 
 // Settings
 const unsigned int SCR_WIDTH = 1400;
@@ -134,6 +141,9 @@ int main()
 
         // Draw the parking lot
         drawParkingLot(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+        
+        // Draw parking lot signage and safety features
+        drawParkingSignage(shader, cubeVAO, cylVAO);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -383,11 +393,11 @@ void setupLighting(Shader& shader)
     // Directional light (sunlight through windows) - coming from right side
     shader.setBool("useDirLight", true);
     shader.setVec3("dirLight.direction", glm::vec3(-0.5f, -0.7f, -0.3f));
-    shader.setVec3("dirLight.ambient", glm::vec3(0.15f, 0.14f, 0.12f));
-    shader.setVec3("dirLight.diffuse", glm::vec3(0.8f, 0.75f, 0.6f));
-    shader.setVec3("dirLight.specular", glm::vec3(0.5f, 0.45f, 0.4f));
+    shader.setVec3("dirLight.ambient", glm::vec3(0.2f, 0.18f, 0.15f));   // Ia - ambient intensity
+    shader.setVec3("dirLight.diffuse", glm::vec3(1.0f, 0.95f, 0.8f));     // Id - diffuse intensity (bright sunlight)
+    shader.setVec3("dirLight.specular", glm::vec3(1.0f, 0.95f, 0.9f));   // Is - specular intensity (bright highlights)
 
-    // Point lights (ceiling-mounted fixtures)
+    // Point lights (ceiling-mounted fixtures) - warm indoor lighting
     int numLights = 12;
     shader.setInt("numPointLights", numLights);
     
@@ -402,12 +412,12 @@ void setupLighting(Shader& shader)
             
             std::string base = "pointLights[" + std::to_string(lightIdx) + "]";
             shader.setVec3(base + ".position", glm::vec3(x, CEILING_HEIGHT - 0.3f, z));
-            shader.setVec3(base + ".ambient", glm::vec3(0.08f, 0.07f, 0.06f));
-            shader.setVec3(base + ".diffuse", glm::vec3(0.9f, 0.85f, 0.7f));
-            shader.setVec3(base + ".specular", glm::vec3(0.6f, 0.55f, 0.5f));
+            shader.setVec3(base + ".ambient", glm::vec3(0.12f, 0.11f, 0.09f));   // Ia - warm ambient
+            shader.setVec3(base + ".diffuse", glm::vec3(1.0f, 0.95f, 0.85f));     // Id - bright warm diffuse
+            shader.setVec3(base + ".specular", glm::vec3(1.0f, 0.95f, 0.9f));    // Is - strong specular for highlights
             shader.setFloat(base + ".constant", 1.0f);
-            shader.setFloat(base + ".linear", 0.09f);
-            shader.setFloat(base + ".quadratic", 0.032f);
+            shader.setFloat(base + ".linear", 0.07f);      // Reduced for longer light reach
+            shader.setFloat(base + ".quadratic", 0.017f);  // Reduced for softer falloff
             lightIdx++;
         }
     }
@@ -852,45 +862,111 @@ void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, 
              glm::vec3(1.5f, 0.4f, 0.1f), glm::vec3(0.1f, 0.6f, 0.2f), 1, 0.6f, 0.5f, 0.3f, 16.0f);
 }
 
-// Draw a procedural tree with trunk and foliage layers
+// Draw a hyper-realistic tree with branching trunk and organic foliage clusters
 void drawTree(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, glm::vec3 position, float height, float spread)
 {
-    // Trunk - tapered cylinder approximated with cubes
-    glm::vec3 trunkColor(0.35f, 0.22f, 0.12f);
-    float trunkHeight = height * 0.4f;
-    float trunkRadius = height * 0.08f;
+    // === BARK/TRUNK COLORS (realistic brown tones like reference) ===
+    glm::vec3 barkDark(0.25f, 0.15f, 0.08f);   // Dark brown bark
+    glm::vec3 barkMid(0.35f, 0.22f, 0.12f);    // Medium brown
+    glm::vec3 barkLight(0.42f, 0.28f, 0.15f);  // Lighter brown for highlights
     
-    // Main trunk
-    drawCube(shader, cubeVAO, glm::vec3(position.x, position.y + trunkHeight/2, position.z),
-             glm::vec3(trunkRadius * 2, trunkHeight, trunkRadius * 2), trunkColor, 0, 0.1f, 0.6f, 0.15f, 8.0f);
+    // === FOLIAGE COLORS (vibrant greens like reference) ===
+    glm::vec3 leafDark(0.12f, 0.35f, 0.08f);   // Dark inner foliage
+    glm::vec3 leafMid(0.18f, 0.48f, 0.12f);    // Main foliage color
+    glm::vec3 leafLight(0.28f, 0.58f, 0.18f);  // Sunlit foliage
+    glm::vec3 leafBright(0.35f, 0.65f, 0.22f); // Brightest highlights
     
-    // Foliage - multiple layers of green "clouds"
-    glm::vec3 leafColors[] = {
-        glm::vec3(0.15f, 0.45f, 0.12f),  // Dark green
-        glm::vec3(0.2f, 0.55f, 0.15f),   // Medium green
-        glm::vec3(0.25f, 0.6f, 0.18f)    // Light green
-    };
+    float trunkHeight = height * 0.35f;
+    float trunkRadius = height * 0.06f;
     
-    float foliageY = position.y + trunkHeight;
-    float layerHeight = height * 0.2f;
+    // === MAIN TRUNK (with texture variation) ===
+    // Slightly tapered - wider at base
+    drawCube(shader, cubeVAO, glm::vec3(position.x, position.y + trunkHeight * 0.25f, position.z),
+             glm::vec3(trunkRadius * 2.2f, trunkHeight * 0.5f, trunkRadius * 2.2f), barkDark, 0, 0.1f, 0.55f, 0.1f, 6.0f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x, position.y + trunkHeight * 0.7f, position.z),
+             glm::vec3(trunkRadius * 1.8f, trunkHeight * 0.4f, trunkRadius * 1.8f), barkMid, 0, 0.1f, 0.55f, 0.1f, 6.0f);
     
-    // Bottom layer (widest)
-    drawCube(shader, cubeVAO, glm::vec3(position.x, foliageY + layerHeight * 0.5f, position.z),
-             glm::vec3(spread * 1.2f, layerHeight, spread * 1.2f), leafColors[0], 0, 0.15f, 0.65f, 0.1f, 4.0f);
+    // Trunk texture/bark detail variation
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x + trunkRadius * 0.3f, position.y + trunkHeight * 0.4f, position.z),
+             glm::vec3(trunkRadius * 0.5f, trunkHeight * 0.3f, trunkRadius * 0.4f), glm::vec3(0, 15, 0),
+             barkLight, 0, 0.1f, 0.5f, 0.1f, 6.0f);
     
-    // Middle layer
-    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.1f, foliageY + layerHeight * 1.3f, position.z - spread * 0.1f),
-             glm::vec3(spread * 1.0f, layerHeight * 0.9f, spread * 1.0f), leafColors[1], 0, 0.15f, 0.65f, 0.1f, 4.0f);
+    // === PRIMARY BRANCHES (split from trunk like in reference) ===
+    float branchY = position.y + trunkHeight * 0.8f;
+    float branchLen = height * 0.25f;
+    float branchRad = trunkRadius * 0.6f;
     
-    // Top layer (narrowest)
-    drawCube(shader, cubeVAO, glm::vec3(position.x - spread * 0.05f, foliageY + layerHeight * 2.0f, position.z + spread * 0.05f),
-             glm::vec3(spread * 0.7f, layerHeight * 0.8f, spread * 0.7f), leafColors[2], 0, 0.15f, 0.65f, 0.1f, 4.0f);
+    // Branch 1 - going up-right
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x + branchLen * 0.3f, branchY + branchLen * 0.3f, position.z - spread * 0.1f),
+             glm::vec3(branchLen, branchRad * 1.5f, branchRad * 1.5f), glm::vec3(0, 0, -40),
+             barkMid, 0, 0.1f, 0.55f, 0.1f, 6.0f);
     
-    // Add some irregular shapes for realism
-    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.3f, foliageY + layerHeight * 0.8f, position.z + spread * 0.2f),
-             glm::vec3(spread * 0.5f, layerHeight * 0.6f, spread * 0.5f), leafColors[0], 0, 0.15f, 0.65f, 0.1f, 4.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x - spread * 0.25f, foliageY + layerHeight * 1.5f, position.z - spread * 0.3f),
-             glm::vec3(spread * 0.45f, layerHeight * 0.5f, spread * 0.4f), leafColors[1], 0, 0.15f, 0.65f, 0.1f, 4.0f);
+    // Branch 2 - going up-left
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x - branchLen * 0.25f, branchY + branchLen * 0.35f, position.z + spread * 0.15f),
+             glm::vec3(branchLen * 0.9f, branchRad * 1.4f, branchRad * 1.4f), glm::vec3(0, 0, 35),
+             barkDark, 0, 0.1f, 0.55f, 0.1f, 6.0f);
+    
+    // Branch 3 - going forward
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x, branchY + branchLen * 0.2f, position.z + branchLen * 0.3f),
+             glm::vec3(branchRad * 1.3f, branchRad * 1.3f, branchLen * 0.8f), glm::vec3(30, 0, 0),
+             barkMid, 0, 0.1f, 0.55f, 0.1f, 6.0f);
+    
+    // Branch 4 - going backward
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x + spread * 0.1f, branchY + branchLen * 0.15f, position.z - branchLen * 0.35f),
+             glm::vec3(branchRad * 1.2f, branchRad * 1.2f, branchLen * 0.7f), glm::vec3(-25, 10, 0),
+             barkLight, 0, 0.1f, 0.55f, 0.1f, 6.0f);
+    
+    // === SECONDARY BRANCHES (smaller, extending outward) ===
+    float secBranchLen = branchLen * 0.5f;
+    float secBranchRad = branchRad * 0.5f;
+    
+    // Multiple smaller branches
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x + spread * 0.4f, branchY + height * 0.15f, position.z),
+             glm::vec3(secBranchLen, secBranchRad, secBranchRad), glm::vec3(0, 0, -50),
+             barkDark, 0, 0.1f, 0.5f, 0.1f, 6.0f);
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x - spread * 0.35f, branchY + height * 0.18f, position.z + spread * 0.2f),
+             glm::vec3(secBranchLen * 0.9f, secBranchRad, secBranchRad), glm::vec3(0, 20, 45),
+             barkMid, 0, 0.1f, 0.5f, 0.1f, 6.0f);
+    
+    // === FOLIAGE CLUSTERS (organic, irregular shapes like reference) ===
+    float foliageY = branchY + branchLen * 0.2f;
+    float clusterSize = spread * 0.45f;
+    
+    // Main central canopy cluster
+    drawCube(shader, cubeVAO, glm::vec3(position.x, foliageY + height * 0.2f, position.z),
+             glm::vec3(clusterSize * 1.4f, clusterSize * 0.9f, clusterSize * 1.4f), leafMid, 0, 0.18f, 0.7f, 0.08f, 4.0f);
+    
+    // Overlapping clusters for organic look
+    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.35f, foliageY + height * 0.12f, position.z - spread * 0.1f),
+             glm::vec3(clusterSize * 1.1f, clusterSize * 0.7f, clusterSize * 1.0f), leafLight, 0, 0.2f, 0.72f, 0.08f, 4.0f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x - spread * 0.3f, foliageY + height * 0.15f, position.z + spread * 0.25f),
+             glm::vec3(clusterSize * 1.2f, clusterSize * 0.75f, clusterSize * 1.1f), leafDark, 0, 0.15f, 0.65f, 0.08f, 4.0f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.1f, foliageY + height * 0.28f, position.z - spread * 0.2f),
+             glm::vec3(clusterSize * 0.9f, clusterSize * 0.65f, clusterSize * 0.9f), leafBright, 0, 0.22f, 0.75f, 0.1f, 4.0f);
+    
+    // Side clusters (hanging foliage)
+    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.5f, foliageY + height * 0.05f, position.z + spread * 0.15f),
+             glm::vec3(clusterSize * 0.8f, clusterSize * 0.5f, clusterSize * 0.7f), leafMid, 0, 0.18f, 0.68f, 0.08f, 4.0f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x - spread * 0.45f, foliageY + height * 0.08f, position.z - spread * 0.2f),
+             glm::vec3(clusterSize * 0.75f, clusterSize * 0.55f, clusterSize * 0.8f), leafLight, 0, 0.2f, 0.7f, 0.08f, 4.0f);
+    
+    // Forward/backward clusters
+    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.15f, foliageY + height * 0.1f, position.z + spread * 0.45f),
+             glm::vec3(clusterSize * 0.9f, clusterSize * 0.6f, clusterSize * 0.85f), leafDark, 0, 0.16f, 0.66f, 0.08f, 4.0f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x - spread * 0.1f, foliageY + height * 0.18f, position.z - spread * 0.4f),
+             glm::vec3(clusterSize * 0.85f, clusterSize * 0.6f, clusterSize * 0.9f), leafBright, 0, 0.2f, 0.72f, 0.1f, 4.0f);
+    
+    // Top crown clusters
+    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.08f, foliageY + height * 0.35f, position.z + spread * 0.05f),
+             glm::vec3(clusterSize * 0.7f, clusterSize * 0.5f, clusterSize * 0.7f), leafLight, 0, 0.22f, 0.75f, 0.1f, 4.0f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x - spread * 0.12f, foliageY + height * 0.32f, position.z - spread * 0.08f),
+             glm::vec3(clusterSize * 0.6f, clusterSize * 0.45f, clusterSize * 0.65f), leafBright, 0, 0.24f, 0.78f, 0.1f, 4.0f);
+    
+    // Small detail clusters for organic texture
+    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.55f, foliageY + height * 0.02f, position.z - spread * 0.05f),
+             glm::vec3(clusterSize * 0.4f, clusterSize * 0.35f, clusterSize * 0.4f), leafMid, 0, 0.18f, 0.68f, 0.08f, 4.0f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x - spread * 0.5f, foliageY + height * 0.05f, position.z + spread * 0.1f),
+             glm::vec3(clusterSize * 0.45f, clusterSize * 0.35f, clusterSize * 0.45f), leafDark, 0, 0.15f, 0.62f, 0.08f, 4.0f);
 }
 
 // Draw the outdoor environment: road, ground, sky, trees
@@ -1006,3 +1082,272 @@ void drawLightRays(Shader& shader, unsigned int cubeVAO)
                  glm::vec3(4.0f, 0.02f, 3.5f), rayColor * 0.2f, 1, 0.7f, 0.3f, 0.0f, 1.0f);
     }
 }
+
+// ============================================================
+// PARKING LOT SIGNAGE AND SAFETY FEATURES
+// ============================================================
+
+// Draw a STOP sign with post
+void drawStopSign(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float rotation)
+{
+    // Colors
+    glm::vec3 postColor(0.45f, 0.45f, 0.48f);    // Metal gray post
+    glm::vec3 signRed(0.85f, 0.1f, 0.1f);        // Bright red for STOP
+    glm::vec3 signWhite(0.95f, 0.95f, 0.95f);    // White border and text
+    glm::vec3 postBase(0.3f, 0.3f, 0.32f);       // Darker base
+    
+    float postHeight = 2.2f;
+    float postRadius = 0.04f;
+    float signSize = 0.5f;
+    
+    // Post (vertical pole)
+    drawCubeRotated(shader, cubeVAO, 
+                   glm::vec3(position.x, position.y + postHeight/2, position.z),
+                   glm::vec3(postRadius * 2, postHeight, postRadius * 2),
+                   glm::vec3(0, rotation, 0),
+                   postColor, 3, 0.1f, 0.5f, 0.6f, 32.0f);
+    
+    // Post base (wider at bottom)
+    drawCubeRotated(shader, cubeVAO, 
+                   glm::vec3(position.x, position.y + 0.1f, position.z),
+                   glm::vec3(postRadius * 4, 0.2f, postRadius * 4),
+                   glm::vec3(0, rotation, 0),
+                   postBase, 3, 0.1f, 0.5f, 0.5f, 16.0f);
+    
+    // Sign plate (octagonal approximated as rotated squares layered)
+    float signY = position.y + postHeight + signSize * 0.4f;
+    
+    // Red octagon background (main sign)
+    drawCubeRotated(shader, cubeVAO, 
+                   glm::vec3(position.x, signY, position.z),
+                   glm::vec3(signSize * 0.08f, signSize, signSize),
+                   glm::vec3(0, rotation, 0),
+                   signRed, 1, 0.15f, 0.7f, 0.4f, 16.0f);
+    
+    // 45-degree rotated layer to make it more octagonal
+    drawCubeRotated(shader, cubeVAO, 
+                   glm::vec3(position.x, signY, position.z),
+                   glm::vec3(signSize * 0.07f, signSize * 0.75f, signSize * 0.75f),
+                   glm::vec3(0, rotation + 45, 0),
+                   signRed, 1, 0.15f, 0.7f, 0.4f, 16.0f);
+    
+    // White border (slightly larger)
+    drawCubeRotated(shader, cubeVAO, 
+                   glm::vec3(position.x + (rotation == 0 ? 0.002f : 0), signY, position.z + (rotation == 90 ? 0.002f : 0)),
+                   glm::vec3(signSize * 0.02f, signSize * 0.85f, signSize * 0.85f),
+                   glm::vec3(0, rotation, 0),
+                   signWhite, 1, 0.2f, 0.8f, 0.5f, 24.0f);
+    
+    // "STOP" text approximation (horizontal white bar)
+    drawCubeRotated(shader, cubeVAO, 
+                   glm::vec3(position.x + (rotation == 0 ? 0.003f : 0), signY, position.z + (rotation == 90 ? 0.003f : 0)),
+                   glm::vec3(signSize * 0.015f, signSize * 0.2f, signSize * 0.6f),
+                   glm::vec3(0, rotation, 0),
+                   signWhite, 1, 0.2f, 0.8f, 0.5f, 24.0f);
+}
+
+// Draw a safety bollard (protective post)
+void drawSafetyBollard(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, glm::vec3 position)
+{
+    // Colors - bright yellow for visibility
+    glm::vec3 yellowPaint(0.95f, 0.8f, 0.1f);    // Safety yellow
+    glm::vec3 blackStripe(0.1f, 0.1f, 0.1f);     // Black reflective stripe
+    glm::vec3 concreteBase(0.5f, 0.5f, 0.52f);   // Concrete foundation
+    
+    float bollardHeight = 0.9f;
+    float bollardRadius = 0.1f;
+    
+    // Concrete base
+    drawCube(shader, cubeVAO, glm::vec3(position.x, position.y + 0.05f, position.z),
+             glm::vec3(bollardRadius * 3, 0.1f, bollardRadius * 3), concreteBase, 0, 0.12f, 0.6f, 0.15f, 8.0f);
+    
+    // Main bollard body (yellow)
+    drawCube(shader, cubeVAO, glm::vec3(position.x, position.y + bollardHeight/2, position.z),
+             glm::vec3(bollardRadius * 2, bollardHeight, bollardRadius * 2), yellowPaint, 3, 0.15f, 0.7f, 0.5f, 24.0f);
+    
+    // Black reflective stripes (2 stripes)
+    drawCube(shader, cubeVAO, glm::vec3(position.x, position.y + bollardHeight * 0.35f, position.z),
+             glm::vec3(bollardRadius * 2.05f, 0.06f, bollardRadius * 2.05f), blackStripe, 3, 0.1f, 0.5f, 0.8f, 48.0f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x, position.y + bollardHeight * 0.65f, position.z),
+             glm::vec3(bollardRadius * 2.05f, 0.06f, bollardRadius * 2.05f), blackStripe, 3, 0.1f, 0.5f, 0.8f, 48.0f);
+    
+    // Top cap (slightly domed)
+    drawCube(shader, cubeVAO, glm::vec3(position.x, position.y + bollardHeight + 0.03f, position.z),
+             glm::vec3(bollardRadius * 2.1f, 0.06f, bollardRadius * 2.1f), yellowPaint, 3, 0.18f, 0.75f, 0.6f, 32.0f);
+}
+
+// Draw a light pole with lamp
+void drawLightPole(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, glm::vec3 position, float height)
+{
+    // Colors
+    glm::vec3 poleColor(0.2f, 0.2f, 0.22f);      // Dark metal pole
+    glm::vec3 lampHousing(0.25f, 0.25f, 0.28f);  // Lamp housing
+    glm::vec3 lampLight(1.0f, 0.95f, 0.85f);     // Warm white light
+    glm::vec3 baseColor(0.3f, 0.3f, 0.32f);      // Base
+    
+    float poleRadius = 0.08f;
+    
+    // Pole base (wide bottom)
+    drawCube(shader, cubeVAO, glm::vec3(position.x, position.y + 0.15f, position.z),
+             glm::vec3(poleRadius * 4, 0.3f, poleRadius * 4), baseColor, 3, 0.1f, 0.5f, 0.5f, 16.0f);
+    
+    // Main pole (tapered - wider at bottom)
+    drawCube(shader, cubeVAO, glm::vec3(position.x, position.y + height * 0.25f, position.z),
+             glm::vec3(poleRadius * 2.5f, height * 0.5f, poleRadius * 2.5f), poleColor, 3, 0.1f, 0.5f, 0.6f, 32.0f);
+    drawCube(shader, cubeVAO, glm::vec3(position.x, position.y + height * 0.7f, position.z),
+             glm::vec3(poleRadius * 2, height * 0.4f, poleRadius * 2), poleColor, 3, 0.1f, 0.5f, 0.6f, 32.0f);
+    
+    // Lamp arm (horizontal extension)
+    drawCube(shader, cubeVAO, glm::vec3(position.x + 0.3f, position.y + height - 0.1f, position.z),
+             glm::vec3(0.6f, poleRadius * 1.5f, poleRadius * 1.5f), poleColor, 3, 0.1f, 0.5f, 0.6f, 32.0f);
+    
+    // Lamp housing (rectangular fixture)
+    drawCube(shader, cubeVAO, glm::vec3(position.x + 0.5f, position.y + height - 0.25f, position.z),
+             glm::vec3(0.4f, 0.15f, 0.25f), lampHousing, 3, 0.1f, 0.5f, 0.5f, 24.0f);
+    
+    // Light panel (bottom of housing - glowing)
+    drawCube(shader, cubeVAO, glm::vec3(position.x + 0.5f, position.y + height - 0.35f, position.z),
+             glm::vec3(0.35f, 0.03f, 0.2f), lampLight, 1, 0.95f, 0.2f, 0.1f, 4.0f);
+    
+    // Light glow on ground (simulated light pool)
+    drawCube(shader, cubeVAO, glm::vec3(position.x + 0.5f, 0.02f, position.z),
+             glm::vec3(3.0f, 0.02f, 3.0f), glm::vec3(1.0f, 0.95f, 0.8f) * 0.15f, 1, 0.6f, 0.4f, 0.1f, 4.0f);
+}
+
+// Draw STOP stencil painted on ground
+void drawStopStencil(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float rotation)
+{
+    glm::vec3 paintWhite(0.95f, 0.95f, 0.95f);
+    float letterHeight = 1.2f;
+    float letterWidth = 0.4f;
+    float letterThick = 0.12f;
+    float spacing = 0.55f;
+    
+    // S
+    float sx = position.x - spacing * 1.5f;
+    drawCubeRotated(shader, cubeVAO, glm::vec3(sx, 0.015f, position.z), 
+                   glm::vec3(letterWidth, 0.02f, letterThick), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);  // top
+    drawCubeRotated(shader, cubeVAO, glm::vec3(sx - letterWidth * 0.35f, 0.015f, position.z - letterHeight * 0.15f), 
+                   glm::vec3(letterThick, 0.02f, letterHeight * 0.35f), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);  // top-left
+    drawCubeRotated(shader, cubeVAO, glm::vec3(sx, 0.015f, position.z - letterHeight * 0.35f), 
+                   glm::vec3(letterWidth, 0.02f, letterThick), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);  // middle
+    drawCubeRotated(shader, cubeVAO, glm::vec3(sx + letterWidth * 0.35f, 0.015f, position.z - letterHeight * 0.55f), 
+                   glm::vec3(letterThick, 0.02f, letterHeight * 0.35f), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);  // bottom-right
+    drawCubeRotated(shader, cubeVAO, glm::vec3(sx, 0.015f, position.z - letterHeight * 0.72f), 
+                   glm::vec3(letterWidth, 0.02f, letterThick), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);  // bottom
+    
+    // T
+    float tx = position.x - spacing * 0.5f;
+    drawCubeRotated(shader, cubeVAO, glm::vec3(tx, 0.015f, position.z), 
+                   glm::vec3(letterWidth, 0.02f, letterThick), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);  // top
+    drawCubeRotated(shader, cubeVAO, glm::vec3(tx, 0.015f, position.z - letterHeight * 0.4f), 
+                   glm::vec3(letterThick, 0.02f, letterHeight * 0.8f), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);  // vertical
+    
+    // O
+    float ox = position.x + spacing * 0.5f;
+    drawCubeRotated(shader, cubeVAO, glm::vec3(ox, 0.015f, position.z), 
+                   glm::vec3(letterWidth, 0.02f, letterThick), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);  // top
+    drawCubeRotated(shader, cubeVAO, glm::vec3(ox, 0.015f, position.z - letterHeight * 0.72f), 
+                   glm::vec3(letterWidth, 0.02f, letterThick), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);  // bottom
+    drawCubeRotated(shader, cubeVAO, glm::vec3(ox - letterWidth * 0.35f, 0.015f, position.z - letterHeight * 0.36f), 
+                   glm::vec3(letterThick, 0.02f, letterHeight * 0.7f), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);  // left
+    drawCubeRotated(shader, cubeVAO, glm::vec3(ox + letterWidth * 0.35f, 0.015f, position.z - letterHeight * 0.36f), 
+                   glm::vec3(letterThick, 0.02f, letterHeight * 0.7f), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);  // right
+    
+    // P
+    float px = position.x + spacing * 1.5f;
+    drawCubeRotated(shader, cubeVAO, glm::vec3(px - letterWidth * 0.35f, 0.015f, position.z - letterHeight * 0.36f), 
+                   glm::vec3(letterThick, 0.02f, letterHeight * 0.8f), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);  // vertical
+    drawCubeRotated(shader, cubeVAO, glm::vec3(px, 0.015f, position.z), 
+                   glm::vec3(letterWidth * 0.7f, 0.02f, letterThick), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);  // top
+    drawCubeRotated(shader, cubeVAO, glm::vec3(px + letterWidth * 0.25f, 0.015f, position.z - letterHeight * 0.15f), 
+                   glm::vec3(letterThick, 0.02f, letterHeight * 0.3f), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);  // right curve
+    drawCubeRotated(shader, cubeVAO, glm::vec3(px, 0.015f, position.z - letterHeight * 0.32f), 
+                   glm::vec3(letterWidth * 0.7f, 0.02f, letterThick), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);  // middle
+}
+
+// Draw directional arrow on ground
+void drawDirectionalArrow(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float rotation)
+{
+    glm::vec3 paintWhite(0.95f, 0.95f, 0.95f);
+    
+    // Arrow shaft
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x, 0.015f, position.z), 
+                   glm::vec3(0.25f, 0.02f, 1.8f), glm::vec3(0, rotation, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);
+    
+    // Arrow head (chevron)
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x + 0.3f, 0.015f, position.z + 0.7f), 
+                   glm::vec3(0.2f, 0.02f, 0.6f), glm::vec3(0, rotation - 35, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);
+    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x - 0.3f, 0.015f, position.z + 0.7f), 
+                   glm::vec3(0.2f, 0.02f, 0.6f), glm::vec3(0, rotation + 35, 0), paintWhite, 1, 0.5f, 0.8f, 0.3f, 16.0f);
+}
+
+// Draw speed bump
+void drawSpeedBump(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float width)
+{
+    glm::vec3 yellowPaint(0.95f, 0.8f, 0.1f);
+    glm::vec3 blackPaint(0.15f, 0.15f, 0.15f);
+    
+    float bumpHeight = 0.08f;
+    float bumpDepth = 0.4f;
+    
+    // Main bump body (yellow and black stripes)
+    float stripeWidth = 0.3f;
+    int numStripes = (int)(width / stripeWidth);
+    
+    for (int i = 0; i < numStripes; i++) {
+        float stripeX = position.x - width/2 + i * stripeWidth + stripeWidth/2;
+        glm::vec3 color = (i % 2 == 0) ? yellowPaint : blackPaint;
+        
+        drawCube(shader, cubeVAO, glm::vec3(stripeX, position.y + bumpHeight/2, position.z),
+                 glm::vec3(stripeWidth, bumpHeight, bumpDepth), color, 1, 0.2f, 0.7f, 0.4f, 16.0f);
+    }
+}
+
+// Draw all parking lot signage and safety features
+void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO)
+{
+    // === STOP SIGNS ===
+    // Near entrance/exit
+    drawStopSign(shader, cubeVAO, glm::vec3(LOT_WIDTH/2 + 5.0f, 0.0f, LOT_DEPTH - 1.5f), 0);
+    drawStopSign(shader, cubeVAO, glm::vec3(LOT_WIDTH/2 - 5.0f, 0.0f, LOT_DEPTH - 1.5f), 180);
+    
+    // At lane intersections inside
+    drawStopSign(shader, cubeVAO, glm::vec3(15.0f, 0.0f, LOT_DEPTH/2), 90);
+    
+    // === STOP STENCILS (painted on ground near stop signs) ===
+    drawStopStencil(shader, cubeVAO, glm::vec3(LOT_WIDTH/2 + 5.0f, 0.0f, LOT_DEPTH - 4.0f), 0);
+    drawStopStencil(shader, cubeVAO, glm::vec3(LOT_WIDTH/2 - 5.0f, 0.0f, LOT_DEPTH - 4.0f), 0);
+    drawStopStencil(shader, cubeVAO, glm::vec3(12.0f, 0.0f, LOT_DEPTH/2), 90);
+    
+    // === DIRECTIONAL ARROWS ===
+    // Guide traffic flow in lanes
+    drawDirectionalArrow(shader, cubeVAO, glm::vec3(LOT_WIDTH/2, 0.0f, 10.0f), 0);
+    drawDirectionalArrow(shader, cubeVAO, glm::vec3(LOT_WIDTH/2, 0.0f, 25.0f), 0);
+    drawDirectionalArrow(shader, cubeVAO, glm::vec3(25.0f, 0.0f, LOT_DEPTH/2 + 5.0f), 90);
+    drawDirectionalArrow(shader, cubeVAO, glm::vec3(45.0f, 0.0f, LOT_DEPTH/2 + 5.0f), 90);
+    
+    // === SAFETY BOLLARDS ===
+    // In front of pillars to protect them
+    drawSafetyBollard(shader, cubeVAO, cylVAO, glm::vec3(12.0f, 0.0f, 9.0f));
+    drawSafetyBollard(shader, cubeVAO, cylVAO, glm::vec3(12.0f, 0.0f, 19.0f));
+    drawSafetyBollard(shader, cubeVAO, cylVAO, glm::vec3(12.0f, 0.0f, 29.0f));
+    drawSafetyBollard(shader, cubeVAO, cylVAO, glm::vec3(24.0f, 0.0f, 9.0f));
+    drawSafetyBollard(shader, cubeVAO, cylVAO, glm::vec3(24.0f, 0.0f, 19.0f));
+    drawSafetyBollard(shader, cubeVAO, cylVAO, glm::vec3(24.0f, 0.0f, 29.0f));
+    
+    // Near entrance to protect walls
+    drawSafetyBollard(shader, cubeVAO, cylVAO, glm::vec3(LOT_WIDTH/2 - 8.0f, 0.0f, LOT_DEPTH - 2.0f));
+    drawSafetyBollard(shader, cubeVAO, cylVAO, glm::vec3(LOT_WIDTH/2 + 8.0f, 0.0f, LOT_DEPTH - 2.0f));
+    
+    // === SPEED BUMPS ===
+    drawSpeedBump(shader, cubeVAO, glm::vec3(LOT_WIDTH/2, 0.0f, LOT_DEPTH - 6.0f), 8.0f);
+    drawSpeedBump(shader, cubeVAO, glm::vec3(LOT_WIDTH/2, 0.0f, 6.0f), 8.0f);
+    
+    // === EXTERIOR LIGHT POLES ===
+    // Outside the parking lot near the road
+    drawLightPole(shader, cubeVAO, cylVAO, glm::vec3(-5.0f, 0.0f, LOT_DEPTH + 5.0f), 5.0f);
+    drawLightPole(shader, cubeVAO, cylVAO, glm::vec3(LOT_WIDTH + 5.0f, 0.0f, LOT_DEPTH + 5.0f), 5.0f);
+    drawLightPole(shader, cubeVAO, cylVAO, glm::vec3(LOT_WIDTH/2, 0.0f, LOT_DEPTH + 12.0f), 5.0f);
+}
+
