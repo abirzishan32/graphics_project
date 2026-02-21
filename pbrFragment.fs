@@ -51,12 +51,6 @@ uniform vec3 sunDirection;
 // Procedural texture type
 uniform int textureType;  // 0=concrete, 1=painted line, 2=car paint, 3=metal, 4=glass
 
-// ============================================================
-// VOLUMETRIC LIGHT SCATTERING (God Rays) - Shader-Based
-// ============================================================
-// This simulates light scattering through dusty/foggy air
-// Based on the idea that light is scattered by particles in the atmosphere
-// No solid geometry - purely mathematical simulation
 
 float hash(vec3 p) {
     return fract(sin(dot(p, vec3(12.9898, 78.233, 45.543))) * 43758.5453);
@@ -136,15 +130,24 @@ vec3 calculateVolumetricScattering(vec3 worldPos) {
 // ============================================================
 // Phong Illumination Model
 // ============================================================
-vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 baseColor) {
-    vec3 lightDir = normalize(-light.direction);
+
+
+
+// input: normal, light direction (Surface normal vector at the fragment/pixel),
+// view direction (Direction from the fragment toward the camera/viewer), base color
+
+
+vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 baseColor) { 
+    vec3 lightDir = normalize(-light.direction); //  light rays are parallel
     
     vec3 ambient = light.ambient * ambientStrength * baseColor;
     
-    float NdotL = max(dot(normal, lightDir), 0.0);
+    float NdotL = max(dot(normal, lightDir), 0.0); //  Measures how directly the light hits the surface
     vec3 diffuse = light.diffuse * diffuseStrength * NdotL * baseColor;
     
     vec3 reflectDir = reflect(-lightDir, normal);
+
+    // Calculate specular reflection based on view direction
     float RdotV = max(dot(reflectDir, viewDir), 0.0);
     float spec = pow(RdotV, shininess);
     vec3 specular = light.specular * specularStrength * spec;
@@ -153,7 +156,7 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 baseColor) {
 }
 
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 baseColor) {
-    vec3 lightDir = normalize(light.position - fragPos);
+    vec3 lightDir = normalize(light.position - fragPos); // Rays diverge from a point, direction depends on fragment position.
     
     float distance = length(light.position - fragPos);
     float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
@@ -245,11 +248,7 @@ void main()
     vec3 globalAmbient = baseColor * (lightsOn ? 0.1 : 0.02);
     result += globalAmbient;
     
-    // ========================================
-    // VOLUMETRIC LIGHT SCATTERING (God Rays)
-    // ========================================
-    // Apply when inside the parking lot (X between 0 and LOT_WIDTH, Z between 0 and LOT_DEPTH)
-    // More visible when lights are OFF
+
     
     float volumetricStrength = lightsOn ? 0.08 : 0.25;
     

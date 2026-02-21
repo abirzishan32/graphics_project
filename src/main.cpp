@@ -45,10 +45,11 @@ void drawStopStencil(Shader& shader, unsigned int cubeVAO, glm::vec3 position, f
 void drawDirectionalArrow(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float rotation);
 void drawSpeedBump(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float width);
 void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO);
+void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO);
 
-// Settings
-const unsigned int SCR_WIDTH = 1400;
-const unsigned int SCR_HEIGHT = 900;
+// Settings (Window size in points, may differ from pixels on Retina)
+unsigned int SCR_WIDTH = 1400;
+unsigned int SCR_HEIGHT = 900;
 
 // Parking lot dimensions (meters)
 const float LOT_WIDTH = 80.0f;
@@ -81,9 +82,7 @@ int main()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-#ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
+
 
     // Create window
     GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "3D Parking Lot - Phong Illumination", NULL, NULL);
@@ -126,31 +125,55 @@ int main()
 
         processInput(window);
 
-        // Clear screen with bright sky blue (daylight outside)
+        // Get actual framebuffer size for High-DPI displays (Mac)
+        int display_w, display_h;
+        glfwGetFramebufferSize(window, &display_w, &display_h);
+        float width = (float)display_w / 2.0f;
+        float height = (float)display_h / 2.0f;
+
+        // Clear screen once
         glClearColor(0.5f, 0.7f, 0.9f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         shader.use();
-
-        // Set view/projection matrices
-        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), 
-                                                (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 200.0f);
-        glm::mat4 view = camera.GetViewMatrix();
-        shader.setMat4("projection", projection);
-        shader.setMat4("view", view);
-        shader.setVec3("viewPos", camera.Position);
-
-        // Setup lighting
         setupLighting(shader);
 
-        // Draw outdoor environment first
-        drawOutdoorEnvironment(shader, cubeVAO, quadVAO, cylVAO);
+        // --- 1. Top-Left: X-axis view (Corner 1) ---
+        glViewport(0, (int)height, (int)width, (int)height);
+        glm::mat4 projection = glm::perspective(glm::radians(45.0f), width / height, 0.1f, 200.0f);
+        glm::vec3 xCamPos = glm::vec3(-10.0f, 20.0f, -10.0f); // Corner
+        glm::mat4 viewX = glm::lookAt(xCamPos, glm::vec3(LOT_WIDTH / 4.0f, 0.0f, LOT_DEPTH / 4.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        shader.setMat4("projection", projection);
+        shader.setMat4("view", viewX);
+        shader.setVec3("viewPos", xCamPos);
+        drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
 
-        // Draw the parking lot
-        drawParkingLot(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
-        
-        // Draw parking lot signage and safety features
-        drawParkingSignage(shader, cubeVAO, cylVAO);
+        // --- 2. Top-Right: Y-axis view (Top-down) ---
+        glViewport((int)width, (int)height, (int)width, (int)height);
+        glm::vec3 yCamPos = glm::vec3(LOT_WIDTH / 2.0f, 50.0f, LOT_DEPTH / 2.0f);
+        glm::mat4 viewY = glm::lookAt(yCamPos, glm::vec3(LOT_WIDTH / 2.0f, 0.0f, LOT_DEPTH / 2.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+        shader.setMat4("projection", projection);
+        shader.setMat4("view", viewY);
+        shader.setVec3("viewPos", yCamPos);
+        drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+
+        // --- 3. Bottom-Left: Z-axis view (Corner 2) ---
+        glViewport(0, 0, (int)width, (int)height);
+        glm::vec3 zCamPos = glm::vec3(LOT_WIDTH + 10.0f, 20.0f, -10.0f); // Other Corner
+        glm::mat4 viewZ = glm::lookAt(zCamPos, glm::vec3(3.0f * LOT_WIDTH / 4.0f, 0.0f, LOT_DEPTH / 4.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        shader.setMat4("projection", projection);
+        shader.setMat4("view", viewZ);
+        shader.setVec3("viewPos", zCamPos);
+        drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+
+        // --- 4. Bottom-Right: Interactive View ---
+        glViewport((int)width, 0, (int)width, (int)height);
+        glm::mat4 projectionInteractive = glm::perspective(glm::radians(camera.Zoom), width / height, 0.1f, 200.0f);
+        glm::mat4 viewInteractive = camera.GetViewMatrix();
+        shader.setMat4("projection", projectionInteractive);
+        shader.setMat4("view", viewInteractive);
+        shader.setVec3("viewPos", camera.Position);
+        drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -191,7 +214,7 @@ void processInput(GLFWwindow *window)
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
-    glViewport(0, 0, width, height);
+    // glViewport is handled in the render loop for multi-viewport setup
 }
 
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
@@ -1390,4 +1413,16 @@ void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVA
         drawCube(shader, cubeVAO, glm::vec3(rodX2, 0.015f, rodZ + 0.5f),
                  glm::vec3(2.0f, 0.02f, 2.5f), poolColor * 0.2f, 1, 0.6f, 0.4f, 0.1f, 4.0f);
     }
+}
+
+// Helper function to draw the entire scene
+void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO) {
+    // Draw outdoor environment first
+    drawOutdoorEnvironment(shader, cubeVAO, quadVAO, cylVAO);
+
+    // Draw the parking lot
+    drawParkingLot(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+    
+    // Draw parking lot signage and safety features
+    drawParkingSignage(shader, cubeVAO, cylVAO);
 }
