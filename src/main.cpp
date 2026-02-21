@@ -91,10 +91,13 @@ bool oneKeyPressed = false;
 bool twoKeyPressed = false;
 bool lKeyPressed = false;
 
-// Texture mode toggle (key 3 cycles 0..3, key 4 not needed since modes cycle)
-// 0=procedural, 1=simple texture, 2=vertex-blended, 3=fragment-blended
+// Texture mode toggle
 int  useTexture = 0;
 bool threeKeyPressed = false;
+
+// Viewport toggle
+bool showFourViewports = true;
+bool vKeyPressed = false;
 
 // Manually define missing GLAD function pointers to fix linker errors
 PFNGLACTIVETEXTUREPROC glad_glActiveTexture = nullptr;
@@ -181,50 +184,64 @@ int main()
         shader.use();
         setupLighting(shader);
 
-        // --- 1. Top-Left: Inside Back-Left Corner ---
-        glViewport(0, (int)height, (int)width, (int)height);
-        glm::mat4 projection = glm::perspective(glm::radians(60.0f), width / height, 0.1f, 200.0f);
-        glm::vec3 camPos1 = glm::vec3(2.0f, 3.0f, 2.0f); 
-        glm::mat4 view1 = glm::lookAt(camPos1, glm::vec3(40.0f, 1.0f, 30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        shader.setMat4("projection", projection);
-        shader.setMat4("view", view1);
-        shader.setVec3("viewPos", camPos1);
-        drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
-        drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
-        drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
+        if (showFourViewports) {
+            // --- 1. Top-Left: Inside Back-Left Corner ---
+            glViewport(0, (int)height, (int)width, (int)height);
+            glm::mat4 projection = glm::perspective(glm::radians(60.0f), width / height, 0.1f, 200.0f);
+            glm::vec3 camPos1 = glm::vec3(2.0f, 3.0f, 2.0f); 
+            glm::mat4 view1 = glm::lookAt(camPos1, glm::vec3(40.0f, 1.0f, 30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            shader.setMat4("projection", projection);
+            shader.setMat4("view", view1);
+            shader.setVec3("viewPos", camPos1);
+            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+            drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
+            drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
 
-        // --- 2. Top-Right: Inside Back-Right Corner ---
-        glViewport((int)width, (int)height, (int)width, (int)height);
-        glm::vec3 camPos2 = glm::vec3(LOT_WIDTH - 2.0f, 3.0f, 2.0f);
-        glm::mat4 view2 = glm::lookAt(camPos2, glm::vec3(40.0f, 1.0f, 30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        shader.setMat4("projection", projection);
-        shader.setMat4("view", view2);
-        shader.setVec3("viewPos", camPos2);
-        drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
-        drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
-        drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
+            // --- 2. Top-Right: Inside Back-Right Corner ---
+            glViewport((int)width, (int)height, (int)width, (int)height);
+            glm::vec3 camPos2 = glm::vec3(LOT_WIDTH - 2.0f, 3.0f, 2.0f);
+            glm::mat4 view2 = glm::lookAt(camPos2, glm::vec3(40.0f, 1.0f, 30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            shader.setMat4("projection", projection);
+            shader.setMat4("view", view2);
+            shader.setVec3("viewPos", camPos2);
+            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+            drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
+            drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
 
-        // --- 3. Bottom-Left: Inside Front-Left Corner ---
-        glViewport(0, 0, (int)width, (int)height);
-        glm::vec3 camPos3 = glm::vec3(2.0f, 3.0f, LOT_DEPTH - 2.0f);
-        glm::mat4 view3 = glm::lookAt(camPos3, glm::vec3(40.0f, 1.0f, 30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        shader.setMat4("projection", projection);
-        shader.setMat4("view", view3);
-        shader.setVec3("viewPos", camPos3);
-        drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
-        drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
-        drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
+            // --- 3. Bottom-Left: Inside Front-Left Corner ---
+            glViewport(0, 0, (int)width, (int)height);
+            glm::vec3 camPos3 = glm::vec3(2.0f, 3.0f, LOT_DEPTH - 2.0f);
+            glm::mat4 view3 = glm::lookAt(camPos3, glm::vec3(40.0f, 1.0f, 30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            shader.setMat4("projection", projection);
+            shader.setMat4("view", view3);
+            shader.setVec3("viewPos", camPos3);
+            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+            drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
+            drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
 
-        // --- 4. Bottom-Right: Interactive View ---
-        glViewport((int)width, 0, (int)width, (int)height);
-        glm::mat4 projectionInteractive = glm::perspective(glm::radians(camera.Zoom), width / height, 0.1f, 200.0f);
-        glm::mat4 viewInteractive = camera.GetViewMatrix();
-        shader.setMat4("projection", projectionInteractive);
-        shader.setMat4("view", viewInteractive);
-        shader.setVec3("viewPos", camera.Position);
-        drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
-        drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
-        drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
+            // --- 4. Bottom-Right: Interactive View ---
+            glViewport((int)width, 0, (int)width, (int)height);
+            glm::mat4 projectionInteractive = glm::perspective(glm::radians(camera.Zoom), width / height, 0.1f, 200.0f);
+            glm::mat4 viewInteractive = camera.GetViewMatrix();
+            shader.setMat4("projection", projectionInteractive);
+            shader.setMat4("view", viewInteractive);
+            shader.setVec3("viewPos", camera.Position);
+            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+            drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
+            drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
+        } else {
+            // --- Single Viewport: Interactive View ---
+            glViewport(0, 0, display_w, display_h);
+            float aspectRatio = (float)display_w / (float)display_h;
+            glm::mat4 projectionFullscreen = glm::perspective(glm::radians(camera.Zoom), aspectRatio, 0.1f, 200.0f);
+            glm::mat4 viewFullscreen = camera.GetViewMatrix();
+            shader.setMat4("projection", projectionFullscreen);
+            shader.setMat4("view", viewFullscreen);
+            shader.setVec3("viewPos", camera.Position);
+            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+            drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
+            drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -293,6 +310,16 @@ void processInput(GLFWwindow *window)
         }
     } else {
         threeKeyPressed = false;
+    }
+
+    // Key V: Toggle between 4 viewports and single viewport
+    if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
+        if (!vKeyPressed) {
+            showFourViewports = !showFourViewports;
+            vKeyPressed = true;
+        }
+    } else {
+        vKeyPressed = false;
     }
 }
 
