@@ -818,16 +818,17 @@ void drawTexturedObjects(Shader& shader, unsigned int cubeVAO,
     }
 
     // ------------------------------------------------------------------
-    // (b) VERTEX-BLENDED TEXTURE – storage container box (mode 2)
-    // Color computed at vertex stage is mixed with the container image.
+    // (b) BLENDED CUBE – storage container box
+    // Initial color is RED. When Key 3 is pressed, the texture is blended 
+    // with this red surface color in the fragment shader (using textureType 4).
     // ------------------------------------------------------------------
     {
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, glm::vec3(LOT_WIDTH/2.0f, 0.6f, LOT_DEPTH * 0.5f));
         model = glm::scale(model, glm::vec3(1.2f, 1.2f, 1.8f));
         shader.setMat4("model", model);
-        shader.setVec3("objectColor", glm::vec3(0.6f, 0.5f, 0.3f));
-        shader.setInt("textureType", 0);
+        shader.setVec3("objectColor", glm::vec3(1.0f, 0.0f, 0.0f)); // Red starting color
+        shader.setInt("textureType", 4);     // Blended mode when texture is active
         shader.setFloat("ambientStrength",  0.12f);
         shader.setFloat("diffuseStrength",  0.85f);
         shader.setFloat("specularStrength", 0.30f);

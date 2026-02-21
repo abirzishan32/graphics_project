@@ -213,11 +213,15 @@ void main()
     
     if (useTexture == 1) {
         // State 1: brick-wall.jpg
-        baseColor = texture(texture1, uv).rgb;
+        vec3 imgColor = texture(texture1, uv).rgb;
+        if (textureType == 4) baseColor = mix(objectColor, imgColor, 0.5);
+        else baseColor = imgColor;
         
     } else if (useTexture == 2) {
         // State 2: container.jpg
-        baseColor = texture(texture2, uv).rgb;
+        vec3 imgColor = texture(texture2, uv).rgb;
+        if (textureType == 4) baseColor = mix(objectColor, imgColor, 0.5);
+        else baseColor = imgColor;
         
     } else {
         // State 0: STARTING STATE (Procedural / base objectColor)
