@@ -138,32 +138,32 @@ int main()
         shader.use();
         setupLighting(shader);
 
-        // --- 1. Top-Left: X-axis view (Corner 1) ---
+        // --- 1. Top-Left: Inside Back-Left Corner ---
         glViewport(0, (int)height, (int)width, (int)height);
-        glm::mat4 projection = glm::perspective(glm::radians(45.0f), width / height, 0.1f, 200.0f);
-        glm::vec3 xCamPos = glm::vec3(-10.0f, 20.0f, -10.0f); // Corner
-        glm::mat4 viewX = glm::lookAt(xCamPos, glm::vec3(LOT_WIDTH / 4.0f, 0.0f, LOT_DEPTH / 4.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 projection = glm::perspective(glm::radians(60.0f), width / height, 0.1f, 200.0f);
+        glm::vec3 camPos1 = glm::vec3(2.0f, 3.0f, 2.0f); 
+        glm::mat4 view1 = glm::lookAt(camPos1, glm::vec3(40.0f, 1.0f, 30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         shader.setMat4("projection", projection);
-        shader.setMat4("view", viewX);
-        shader.setVec3("viewPos", xCamPos);
+        shader.setMat4("view", view1);
+        shader.setVec3("viewPos", camPos1);
         drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
 
-        // --- 2. Top-Right: Y-axis view (Top-down) ---
+        // --- 2. Top-Right: Inside Back-Right Corner ---
         glViewport((int)width, (int)height, (int)width, (int)height);
-        glm::vec3 yCamPos = glm::vec3(LOT_WIDTH / 2.0f, 50.0f, LOT_DEPTH / 2.0f);
-        glm::mat4 viewY = glm::lookAt(yCamPos, glm::vec3(LOT_WIDTH / 2.0f, 0.0f, LOT_DEPTH / 2.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+        glm::vec3 camPos2 = glm::vec3(LOT_WIDTH - 2.0f, 3.0f, 2.0f);
+        glm::mat4 view2 = glm::lookAt(camPos2, glm::vec3(40.0f, 1.0f, 30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         shader.setMat4("projection", projection);
-        shader.setMat4("view", viewY);
-        shader.setVec3("viewPos", yCamPos);
+        shader.setMat4("view", view2);
+        shader.setVec3("viewPos", camPos2);
         drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
 
-        // --- 3. Bottom-Left: Z-axis view (Corner 2) ---
+        // --- 3. Bottom-Left: Inside Front-Left Corner ---
         glViewport(0, 0, (int)width, (int)height);
-        glm::vec3 zCamPos = glm::vec3(LOT_WIDTH + 10.0f, 20.0f, -10.0f); // Other Corner
-        glm::mat4 viewZ = glm::lookAt(zCamPos, glm::vec3(3.0f * LOT_WIDTH / 4.0f, 0.0f, LOT_DEPTH / 4.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::vec3 camPos3 = glm::vec3(2.0f, 3.0f, LOT_DEPTH - 2.0f);
+        glm::mat4 view3 = glm::lookAt(camPos3, glm::vec3(40.0f, 1.0f, 30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         shader.setMat4("projection", projection);
-        shader.setMat4("view", viewZ);
-        shader.setVec3("viewPos", zCamPos);
+        shader.setMat4("view", view3);
+        shader.setVec3("viewPos", camPos3);
         drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
 
         // --- 4. Bottom-Right: Interactive View ---
