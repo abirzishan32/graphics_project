@@ -466,11 +466,14 @@ void setupLighting(Shader& shader)
         std::string base = "windowPositions[" + std::to_string(i) + "]";
         shader.setVec3(base, glm::vec3(0.0f, 2.5f, z));
     }
-    shader.setVec3("sunDirection", glm::normalize(glm::vec3(1.0f, -0.5f, 0.2f)));
+    // Unified Sun Direction (from window towards parking lot)
+    // Windows are on negative X wall, so light direction is positive X and down/forward
+    glm::vec3 sunDir = glm::normalize(glm::vec3(1.0f, -0.6f, 0.4f)); 
+    shader.setVec3("sunDirection", sunDir);
     
     // Directional light (sunlight through windows)
     shader.setBool("useDirLight", true);
-    shader.setVec3("dirLight.direction", glm::vec3(-0.5f, -0.7f, -0.3f));
+    shader.setVec3("dirLight.direction", sunDir);
     
     // Base ambient when everything is off
     if (!ceilingLightsOn && !entranceLightsOn) {

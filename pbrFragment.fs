@@ -138,7 +138,9 @@ vec3 calculateVolumetricScattering(vec3 worldPos) {
 
 
 vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 baseColor) { 
-    vec3 lightDir = normalize(-light.direction); //  light rays are parallel
+    // Directional light source (like the sun) where rays are parallel.
+    // We negate the light.direction to get the direction towards the light source.
+    vec3 lightDir = normalize(-light.direction); 
     
     vec3 ambient = light.ambient * ambientStrength * baseColor;
     
