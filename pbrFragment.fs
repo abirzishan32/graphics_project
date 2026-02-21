@@ -4,6 +4,8 @@ out vec4 FragColor;
 in vec3 FragPos;
 in vec3 Normal;
 in vec2 TexCoords;
+// Color computed at the vertex stage (received by interpolation)
+in vec3 VertexColor;
 
 // Camera position for specular calculation
 uniform vec3 viewPos;
@@ -28,7 +30,7 @@ struct DirLight {
 uniform DirLight dirLight;
 uniform bool useDirLight;
 
-// Point Lights (ceiling fixtures)
+// Point Lights (ceiling fixtures + entrance bars)
 #define MAX_POINT_LIGHTS 16
 struct PointLight {
     vec3 position;
@@ -48,8 +50,22 @@ uniform vec3 windowPositions[MAX_WINDOWS];
 uniform int numWindows;
 uniform vec3 sunDirection;
 
-// Procedural texture type
-uniform int textureType;  // 0=concrete, 1=painted line, 2=car paint, 3=metal, 4=glass
+// ============================================================
+// Texture Uniforms
+// ============================================================
+uniform sampler2D texture1;    // brick-wall.jpg (unit 0)
+uniform sampler2D texture2;    // container.png  (unit 1)
+
+// useTexture modes:
+//   0 = procedural only (no image texture)
+//   1 = simple texture (image texture replaces object color, no blend)
+//   2 = vertex-blended (mix image texture with color computed in VERTEX shader)
+//   3 = fragment-blended (mix image texture with object color, factor computed per-fragment)
+uniform int useTexture;
+
+// Procedural texture type (used when useTexture == 0)
+// 0=concrete, 1=painted line, 2=car paint, 3=metal
+uniform int textureType;
 
 
 float hash(vec3 p) {
@@ -74,56 +90,29 @@ float noise3D(vec3 p) {
 }
 
 // Calculate light shaft intensity at a point
-// This simulates Mie scattering in dusty air
 float calculateLightShaft(vec3 worldPos, vec3 windowPos, vec3 lightDir) {
-    // Vector from window to this fragment
     vec3 toFragment = worldPos - windowPos;
-    
-    // Project fragment position onto light ray direction
     float projLen = dot(toFragment, lightDir);
-    
-    // Only consider points in front of window (inside parking lot)
     if (projLen < 0.0 || projLen > 15.0) return 0.0;
-    
-    // Calculate perpendicular distance from light ray
     vec3 closestPointOnRay = windowPos + lightDir * projLen;
     float perpDist = length(worldPos - closestPointOnRay);
-    
-    // Light shaft width (wider near window, spreading out)
     float beamWidth = 0.8 + projLen * 0.15;
-    
-    // Gaussian falloff from ray center
     float intensity = exp(-perpDist * perpDist / (beamWidth * beamWidth));
-    
-    // Decrease intensity with distance from window
-    float distFalloff = 1.0 - projLen / 18.0;
-    distFalloff = max(distFalloff, 0.0);
-    
-    // Add dust/particle noise for realistic scattering
+    float distFalloff = max(1.0 - projLen / 18.0, 0.0);
     float dustNoise = noise3D(worldPos * 2.0);
-    dustNoise = 0.7 + dustNoise * 0.6; // Range 0.7-1.3
-    
+    dustNoise = 0.7 + dustNoise * 0.6;
     return intensity * distFalloff * dustNoise;
 }
 
 // Calculate total volumetric scattering from all windows
 vec3 calculateVolumetricScattering(vec3 worldPos) {
     vec3 scattering = vec3(0.0);
-    
-    // WARM GOLDEN SUNLIGHT - realistic afternoon sun color
-    // More saturated orange-gold for visible warmth
     vec3 sunlightColor = vec3(1.0, 0.75, 0.4);
-    
-    // Sun ray direction (from window into the room)
     vec3 rayDir = normalize(sunDirection);
-    
     for (int i = 0; i < numWindows && i < MAX_WINDOWS; i++) {
         float shaftIntensity = calculateLightShaft(worldPos, windowPositions[i], rayDir);
-        
-        // Accumulate light scattering with warm coloring
         scattering += sunlightColor * shaftIntensity;
     }
-    
     return scattering;
 }
 
@@ -131,67 +120,57 @@ vec3 calculateVolumetricScattering(vec3 worldPos) {
 // Phong Illumination Model
 // ============================================================
 
-
-
-// input: normal, light direction (Surface normal vector at the fragment/pixel),
-// view direction (Direction from the fragment toward the camera/viewer), base color
-
-
-vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 baseColor) { 
-    // Directional light source (like the sun) where rays are parallel.
-    // We negate the light.direction to get the direction towards the light source.
-    vec3 lightDir = normalize(-light.direction); 
-    
-    vec3 ambient = light.ambient * ambientStrength * baseColor;
-    
-    float NdotL = max(dot(normal, lightDir), 0.0); //  Measures how directly the light hits the surface
-    vec3 diffuse = light.diffuse * diffuseStrength * NdotL * baseColor;
-    
+// Directional Light: rays are parallel (sun/infinite source).
+// We negate light.direction to get the direction towards the light source.
+vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 baseColor) {
+    vec3 lightDir = normalize(-light.direction);
+    vec3 ambient  = light.ambient * ambientStrength * baseColor;
+    float NdotL   = max(dot(normal, lightDir), 0.0);
+    vec3 diffuse  = light.diffuse * diffuseStrength * NdotL * baseColor;
     vec3 reflectDir = reflect(-lightDir, normal);
-
-    // Calculate specular reflection based on view direction
-    float RdotV = max(dot(reflectDir, viewDir), 0.0);
-    float spec = pow(RdotV, shininess);
+    float RdotV   = max(dot(reflectDir, viewDir), 0.0);
+    float spec    = pow(RdotV, shininess);
     vec3 specular = light.specular * specularStrength * spec;
-    
     return ambient + diffuse + specular;
 }
 
+// Point Light: illuminates in all directions, fading with the inverse-square law.
+// Attenuation formula: f_att = 1.0 / (K_c + K_l*d + K_q*d^2)
+// Applied to ambient, diffuse and specular equally.
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 baseColor) {
-    // Point lights illuminate in all directions, fading over distance (attenuation).
-    // We calculate the direction from fragment towards light.
+    // Direction from fragment towards the light source
     vec3 lightDir = normalize(light.position - fragPos);
     
-    // Attenuation calculation derived from physical light behavior:
-    // f_att = 1.0 / (K_c + K_l * d + K_q * d^2)
-    float distance = length(light.position - fragPos);
+    // Distance-based attenuation
+    float distance    = length(light.position - fragPos);
     float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
     
-    vec3 ambient = light.ambient * ambientStrength * baseColor;
+    // Ambient: constant scattered fill light
+    vec3 ambient  = light.ambient * ambientStrength * baseColor;
     
-    // Measures how directly the light hits the surface
-    float NdotL = max(dot(normal, lightDir), 0.0);
-    vec3 diffuse = light.diffuse * diffuseStrength * NdotL * baseColor;
+    // Diffuse: measures how directly the light hits the surface (Lambertian)
+    float NdotL   = max(dot(normal, lightDir), 0.0);
+    vec3 diffuse  = light.diffuse * diffuseStrength * NdotL * baseColor;
     
-    // Specular reflection
+    // Specular: mirror-like highlight (Phong reflection model)
     vec3 reflectDir = reflect(-lightDir, normal);
-    float RdotV = max(dot(reflectDir, viewDir), 0.0);
-    float spec = pow(RdotV, shininess);
+    float RdotV   = max(dot(reflectDir, viewDir), 0.0);
+    float spec    = pow(RdotV, shininess);
     vec3 specular = light.specular * specularStrength * spec;
     
     // Apply attenuation to all components
-    ambient *= attenuation;
-    diffuse *= attenuation;
+    ambient  *= attenuation;
+    diffuse  *= attenuation;
     specular *= attenuation;
     
     return ambient + diffuse + specular;
 }
 
 // ============================================================
-// Procedural Texturing
+// Procedural Texturing (used when useTexture == 0)
 // ============================================================
 vec3 proceduralConcrete(vec2 uv, vec3 baseColor) {
-    float n1 = fract(sin(dot(floor(uv * 50.0), vec2(12.9898, 78.233))) * 43758.5453);
+    float n1 = fract(sin(dot(floor(uv * 50.0),  vec2(12.9898, 78.233))) * 43758.5453);
     float n2 = fract(sin(dot(floor(uv * 150.0), vec2(12.9898, 78.233))) * 43758.5453);
     float n3 = fract(sin(dot(floor(uv * 400.0), vec2(12.9898, 78.233))) * 43758.5453);
     float noise = n1 * 0.5 + n2 * 0.3 + n3 * 0.2;
@@ -223,57 +202,78 @@ vec3 proceduralMetal(vec2 uv, vec3 baseColor) {
 // ============================================================
 void main()
 {
-    vec3 norm = normalize(Normal);
+    vec3 norm    = normalize(Normal);
     vec3 viewDir = normalize(viewPos - FragPos);
+    vec2 uv      = TexCoords;  // Use the per-vertex interpolated UV
     
-    // Get base color with procedural texturing
-    vec3 baseColor = objectColor;
-    vec2 uv = FragPos.xz * 0.1;
+    // --------------------------------------------------------
+    // Determine base color according to texture mode
+    // --------------------------------------------------------
+    vec3 baseColor;
     
-    if (textureType == 0) {
-        baseColor = proceduralConcrete(uv, objectColor);
-    } else if (textureType == 1) {
-        baseColor = proceduralPaintedLine(uv, objectColor);
-    } else if (textureType == 2) {
-        baseColor = proceduralCarPaint(uv, objectColor, viewDir, norm);
-    } else if (textureType == 3) {
-        baseColor = proceduralMetal(uv, objectColor);
+    if (useTexture == 1) {
+        // Mode 1 – SIMPLE TEXTURE
+        // The image texture is used directly as the base color.
+        // No surface color blending: purely the texel color.
+        baseColor = texture(texture1, uv).rgb;
+        
+    } else if (useTexture == 2) {
+        // Mode 2 – VERTEX-BLENDED TEXTURE
+        // Color computed at the VERTEX stage (VertexColor) is mixed with the image texture
+        // at the FRAGMENT stage. This shows how per-vertex color can enrich a texture.
+        vec3 imgColor = texture(texture2, uv).rgb;
+        baseColor = mix(VertexColor, imgColor, 0.55);
+        
+    } else if (useTexture == 3) {
+        // Mode 3 – FRAGMENT-BLENDED TEXTURE
+        // The blend factor is computed per-fragment from world-space height (FragPos.y).
+        // Higher points get more of the image texture; lower points keep objectColor.
+        // This is a purely fragment-stage computation.
+        float blendFactor = clamp(FragPos.y / 3.5, 0.0, 1.0);
+        vec3 imgColor = texture(texture1, uv).rgb;
+        baseColor = mix(objectColor, imgColor, blendFactor);
+        
+    } else {
+        // Mode 0 – PROCEDURAL only (existing behavior)
+        baseColor = objectColor;
+        vec2 procUV = FragPos.xz * 0.1;
+        if      (textureType == 0) baseColor = proceduralConcrete(procUV, objectColor);
+        else if (textureType == 1) baseColor = proceduralPaintedLine(procUV, objectColor);
+        else if (textureType == 2) baseColor = proceduralCarPaint(procUV, objectColor, viewDir, norm);
+        else if (textureType == 3) baseColor = proceduralMetal(procUV, objectColor);
     }
     
-    // Accumulate lighting
+    // --------------------------------------------------------
+    // Accumulate Phong lighting from all sources (Multiple Lights)
+    // --------------------------------------------------------
     vec3 result = vec3(0.0);
     
-    // Add directional light
+    // 1. Directional light (parallel rays from the sun through windows)
     if (useDirLight) {
         result += CalcDirLight(dirLight, norm, viewDir, baseColor);
     }
     
-    // Add point lights
+    // 2. Point lights (ceiling fixtures + entrance bar lights)
+    //    Each contributes ambient + diffuse + specular with distance attenuation
     for (int i = 0; i < numPointLights && i < MAX_POINT_LIGHTS; i++) {
         result += CalcPointLight(pointLights[i], norm, FragPos, viewDir, baseColor);
     }
     
-    // Minimum ambient
+    // 3. Global ambient fallback (prevents fully black surfaces)
     vec3 globalAmbient = baseColor * (lightsOn ? 0.1 : 0.02);
     result += globalAmbient;
     
-
-    
+    // 4. Volumetric scattering (god rays inside parking lot)
     float volumetricStrength = lightsOn ? 0.08 : 0.25;
-    
-    // Check if fragment is inside the parking lot volume
-    if (FragPos.x > -1.0 && FragPos.x < 62.0 && 
-        FragPos.z > -1.0 && FragPos.z < 42.0 && 
-        FragPos.y > 0.0 && FragPos.y < 4.0) {
-        
+    if (FragPos.x > -1.0 && FragPos.x < 62.0 &&
+        FragPos.z > -1.0 && FragPos.z < 42.0 &&
+        FragPos.y > 0.0  && FragPos.y < 4.0) {
         vec3 volumetric = calculateVolumetricScattering(FragPos);
         result += volumetric * volumetricStrength;
     }
     
     // Gamma correction
     result = pow(result, vec3(1.0/2.2));
-    
-    // Clamp to prevent over-brightness
     result = min(result, vec3(1.0));
     
     FragColor = vec4(result, 1.0);

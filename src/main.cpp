@@ -14,6 +14,10 @@
 #include <vector>
 #include <cmath>
 
+// stb_image: single-header image loader for textures (GL_REPEAT, mipmaps)
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 // Function declarations
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -48,6 +52,13 @@ void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVA
 void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO);
 unsigned int createCurvedBarrierVAO(int& outVertexCount);
 void drawCurvedBarrier(Shader& shader, unsigned int VAO, int vertexCount);
+unsigned int createSphereVAO(int& outVertexCount);
+unsigned int createConeVAO(int& outVertexCount);
+unsigned int loadTexture(const char* path);
+void drawTexturedObjects(Shader& shader, unsigned int cubeVAO,
+    unsigned int sphereVAO, int sphereCount,
+    unsigned int coneVAO, int coneCount,
+    unsigned int texBrick, unsigned int texContainer);
 
 // Settings (Window size in points, may differ from pixels on Retina)
 unsigned int SCR_WIDTH = 1400;
@@ -80,6 +91,15 @@ bool oneKeyPressed = false;
 bool twoKeyPressed = false;
 bool lKeyPressed = false;
 
+// Texture mode toggle (key 3 cycles 0..3, key 4 not needed since modes cycle)
+// 0=procedural, 1=simple texture, 2=vertex-blended, 3=fragment-blended
+int  useTexture = 0;
+bool threeKeyPressed = false;
+
+// Manually define missing GLAD function pointers to fix linker errors
+PFNGLACTIVETEXTUREPROC glad_glActiveTexture = nullptr;
+PFNGLGENERATEMIPMAPPROC glad_glGenerateMipmap = nullptr;
+
 int main()
 {
     // Initialize GLFW
@@ -107,6 +127,14 @@ int main()
         std::cout << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
+    // Manually load function pointers that are missing from the project's glad.c
+    // These are OpenGL 1.3+ core/extension functions needed for multi-texturing and mipmaps.
+    glad_glActiveTexture = (PFNGLACTIVETEXTUREPROC)glfwGetProcAddress("glActiveTexture");
+    glad_glGenerateMipmap = (PFNGLGENERATEMIPMAPPROC)glfwGetProcAddress("glGenerateMipmap");
+    
+    if (!glad_glActiveTexture || !glad_glGenerateMipmap) {
+        std::cout << "Warning: Failed to load glActiveTexture or glGenerateMipmap" << std::endl;
+    }
 
     // Enable depth testing and blending for light rays
     glEnable(GL_DEPTH_TEST);
@@ -123,6 +151,14 @@ int main()
     unsigned int wedgeVAO = createWedgeVAO();
     int curvedBarrierCount = 0;
     unsigned int curvedBarrierVAO = createCurvedBarrierVAO(curvedBarrierCount);
+    // Curved objects for texture demonstration
+    int sphereCount = 0;
+    unsigned int sphereVAO = createSphereVAO(sphereCount);
+    int coneCount = 0;
+    unsigned int coneVAO = createConeVAO(coneCount);
+    // Load image textures using stb_image (GL_REPEAT + trilinear mipmapping)
+    unsigned int texBrick     = loadTexture("brick-wall.jpg");
+    unsigned int texContainer = loadTexture("container.png");
 
     // Render loop
     while (!glfwWindowShouldClose(window)) {
@@ -155,6 +191,7 @@ int main()
         shader.setVec3("viewPos", camPos1);
         drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
         drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
+        drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
 
         // --- 2. Top-Right: Inside Back-Right Corner ---
         glViewport((int)width, (int)height, (int)width, (int)height);
@@ -165,6 +202,7 @@ int main()
         shader.setVec3("viewPos", camPos2);
         drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
         drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
+        drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
 
         // --- 3. Bottom-Left: Inside Front-Left Corner ---
         glViewport(0, 0, (int)width, (int)height);
@@ -175,6 +213,7 @@ int main()
         shader.setVec3("viewPos", camPos3);
         drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
         drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
+        drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
 
         // --- 4. Bottom-Right: Interactive View ---
         glViewport((int)width, 0, (int)width, (int)height);
@@ -185,6 +224,7 @@ int main()
         shader.setVec3("viewPos", camera.Position);
         drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
         drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
+        drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -242,6 +282,17 @@ void processInput(GLFWwindow *window)
         }
     } else {
         lKeyPressed = false;
+    }
+
+    // Key 3: Cycle texture mode
+    // 0 = procedural, 1 = simple texture, 2 = vertex-blended, 3 = fragment-blended
+    if (glfwGetKey(window, GLFW_KEY_3) == GLFW_PRESS) {
+        if (!threeKeyPressed) {
+            useTexture = (useTexture + 1) % 4;
+            threeKeyPressed = true;
+        }
+    } else {
+        threeKeyPressed = false;
     }
 }
 
@@ -565,6 +616,285 @@ void drawCurvedBarrier(Shader& shader, unsigned int VAO, int vertexCount) {
     glBindVertexArray(VAO);
     glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
+}
+
+// ============================================================
+// Texture Loading
+// Applies GL_REPEAT wrapping and GL_LINEAR_MIPMAP_LINEAR filtering.
+// ============================================================
+unsigned int loadTexture(const char* path) {
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+    int width, height, nChannels;
+    stbi_set_flip_vertically_on_load(true);
+    unsigned char* data = stbi_load(path, &width, &height, &nChannels, 0);
+    if (data) {
+        GLenum format = (nChannels == 4) ? GL_RGBA : GL_RGB;
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        // GL_REPEAT: texture tiles when UVs exceed [0,1]
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        // Trilinear filtering: smooth between mipmap levels and within each level
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        std::cout << "Loaded texture: " << path << " (" << width << "x" << height << ", " << nChannels << " ch)\n";
+    } else {
+        std::cerr << "Failed to load texture: " << path << "\n";
+    }
+    stbi_image_free(data);
+    return textureID;
+}
+
+// ============================================================
+// Sphere VAO (UV sphere)
+// Positions + smooth normals (radial) + UV coordinates
+// Used for: textured sphere showing Phong highlights + image texture
+// ============================================================
+unsigned int createSphereVAO(int& outVertexCount) {
+    const int stacks = 32;
+    const int slices = 32;
+    const float radius = 1.0f;
+    const float PI = 3.14159265358979f;
+
+    std::vector<float> vertices;
+    std::vector<unsigned int> indices;
+
+    for (int i = 0; i <= stacks; i++) {
+        float phi   = PI * (float)i / stacks;          // 0 .. PI
+        float sinP  = sin(phi);
+        float cosP  = cos(phi);
+        for (int j = 0; j <= slices; j++) {
+            float theta = 2.0f * PI * (float)j / slices; // 0 .. 2PI
+            float sinT  = sin(theta);
+            float cosT  = cos(theta);
+            // Vertex position on the unit sphere
+            float x = sinP * cosT;
+            float y = cosP;
+            float z = sinP * sinT;
+            // Normal = position (unit sphere)
+            float u = (float)j / slices;
+            float v = (float)i / stacks;
+            vertices.insert(vertices.end(), {x * radius, y * radius, z * radius,
+                                             x, y, z,  // analytical unit normal
+                                             u, v});
+        }
+    }
+    for (int i = 0; i < stacks; i++) {
+        for (int j = 0; j < slices; j++) {
+            unsigned int tl = i * (slices + 1) + j;
+            unsigned int bl = (i + 1) * (slices + 1) + j;
+            indices.push_back(tl);     indices.push_back(bl);     indices.push_back(tl + 1);
+            indices.push_back(tl + 1); indices.push_back(bl);     indices.push_back(bl + 1);
+        }
+    }
+    outVertexCount = (int)indices.size();
+
+    unsigned int VAO, VBO, EBO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glBindVertexArray(0);
+    return VAO;
+}
+
+// ============================================================
+// Cone VAO (side surface only, open base)
+// Positions + smooth side normals + UV coordinates
+// Used for: textured cone showing Phong gradient on curved side
+// ============================================================
+unsigned int createConeVAO(int& outVertexCount) {
+    const int slices = 36;
+    const float radius = 0.8f;
+    const float height = 2.0f;
+    const float PI = 3.14159265358979f;
+
+    std::vector<float> vertices;
+    std::vector<unsigned int> indices;
+
+    // Side normals for a cone: outward slant (normal has a Y component = r/h)
+    float slopeLen = sqrt(radius * radius + height * height);
+    float nY = radius / slopeLen;   // upward tilt of the normal
+    float nR = height / slopeLen;   // outward strength of the normal
+
+    for (int i = 0; i <= slices; i++) {
+        float angle = 2.0f * PI * (float)i / slices;
+        float cosA  = cos(angle);
+        float sinA  = sin(angle);
+        // Base ring vertex
+        vertices.insert(vertices.end(), {
+            radius * cosA, 0.0f, radius * sinA,   // position (base)
+            nR * cosA, nY, nR * sinA,              // smooth normal
+            (float)i / slices, 0.0f                // uv
+        });
+        // Apex vertex (same u, v=1)
+        vertices.insert(vertices.end(), {
+            0.0f, height, 0.0f,                    // apex position
+            nR * cosA, nY, nR * sinA,              // same outward normal
+            (float)i / slices, 1.0f                // uv
+        });
+    }
+    // Triangles: every quad on the side uses base[i], apex[i], base[i+1]
+    for (int i = 0; i < slices; i++) {
+        unsigned int base0 = i * 2;
+        unsigned int apex0 = i * 2 + 1;
+        unsigned int base1 = (i + 1) * 2;
+        indices.push_back(base0); indices.push_back(base1); indices.push_back(apex0);
+    }
+    outVertexCount = (int)indices.size();
+
+    unsigned int VAO, VBO, EBO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glBindVertexArray(0);
+    return VAO;
+}
+
+// ============================================================
+// Draw all textured demonstration objects
+// Showcases all three texture modes + both curved objects
+// ============================================================
+void drawTexturedObjects(Shader& shader, unsigned int cubeVAO,
+    unsigned int sphereVAO, int sphereCount,
+    unsigned int coneVAO,   int coneCount,
+    unsigned int texBrick, unsigned int texContainer)
+{
+    // Bind both texture units once
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texBrick);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, texContainer);
+    shader.setInt("texture1", 0);
+    shader.setInt("texture2", 1);
+
+    // Share the current global texture mode
+    shader.setInt("useTexture", useTexture);
+
+    // ------------------------------------------------------------------
+    // (a) SIMPLE TEXTURE – brick wall panel (mode 1 when active)
+    // The image texture is used *directly* as the base color (no mixing).
+    // ------------------------------------------------------------------
+    {
+        glm::mat4 model = glm::mat4(1.0f);
+        // Stand a brick display panel against the right wall, near the barrier
+        model = glm::translate(model, glm::vec3(LOT_WIDTH - 0.2f, 1.5f, LOT_DEPTH * 0.3f));
+        model = glm::scale(model, glm::vec3(0.2f, 3.0f, 6.0f));
+        shader.setMat4("model", model);
+        shader.setVec3("objectColor", glm::vec3(0.9f, 0.88f, 0.86f));
+        shader.setInt("textureType", 0);
+        shader.setFloat("ambientStrength",  0.12f);
+        shader.setFloat("diffuseStrength",  0.9f);
+        shader.setFloat("specularStrength", 0.15f);
+        shader.setFloat("shininess", 16.0f);
+        glBindVertexArray(cubeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
+    }
+
+    // ------------------------------------------------------------------
+    // (b) VERTEX-BLENDED TEXTURE – storage container box (mode 2)
+    // Color computed at vertex stage is mixed with the container image.
+    // ------------------------------------------------------------------
+    {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(LOT_WIDTH/2.0f, 0.6f, LOT_DEPTH * 0.5f));
+        model = glm::scale(model, glm::vec3(1.2f, 1.2f, 1.8f));
+        shader.setMat4("model", model);
+        shader.setVec3("objectColor", glm::vec3(0.6f, 0.5f, 0.3f));
+        shader.setInt("textureType", 0);
+        shader.setFloat("ambientStrength",  0.12f);
+        shader.setFloat("diffuseStrength",  0.85f);
+        shader.setFloat("specularStrength", 0.30f);
+        shader.setFloat("shininess", 32.0f);
+        glBindVertexArray(cubeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
+    }
+
+    // ------------------------------------------------------------------
+    // (c) FRAGMENT-BLENDED TEXTURE – accent ramp/plinth near entrance (mode 3)
+    // Blend factor is computed per-fragment from world Y height.
+    // ------------------------------------------------------------------
+    {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(LOT_WIDTH/2.0f + 2.0f, 0.0f, LOT_DEPTH - 4.0f));
+        model = glm::scale(model, glm::vec3(3.5f, 3.5f, 0.3f));
+        shader.setMat4("model", model);
+        shader.setVec3("objectColor", glm::vec3(0.7f, 0.65f, 0.6f));
+        shader.setInt("textureType", 0);
+        shader.setFloat("ambientStrength",  0.12f);
+        shader.setFloat("diffuseStrength",  0.85f);
+        shader.setFloat("specularStrength", 0.40f);
+        shader.setFloat("shininess", 48.0f);
+        glBindVertexArray(cubeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
+    }
+
+    // ------------------------------------------------------------------
+    // (d) TEXTURED SPHERE (curved object #1)
+    // UV sphere with smooth radial normals. Brick texture.
+    // Shows Phong specular highlight shifting as the viewer moves.
+    // ------------------------------------------------------------------
+    {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(LOT_WIDTH/2.0f - 3.0f, 1.0f, LOT_DEPTH * 0.4f));
+        model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));
+        shader.setMat4("model", model);
+        shader.setVec3("objectColor", glm::vec3(0.9f, 0.88f, 0.85f));
+        shader.setInt("textureType", 0);
+        shader.setFloat("ambientStrength",  0.10f);
+        shader.setFloat("diffuseStrength",  0.85f);
+        shader.setFloat("specularStrength", 0.70f);
+        shader.setFloat("shininess", 64.0f);
+        glBindVertexArray(sphereVAO);
+        glDrawElements(GL_TRIANGLES, sphereCount, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
+    }
+
+    // ------------------------------------------------------------------
+    // (e) TEXTURED CONE (curved object #2)
+    // Cone with smooth side normals. Container texture.
+    // Diffuse gradient visible from base (bright) to apex (dim).
+    // ------------------------------------------------------------------
+    {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(LOT_WIDTH/2.0f + 4.0f, 0.0f, LOT_DEPTH * 0.4f));
+        shader.setMat4("model", model);
+        shader.setVec3("objectColor", glm::vec3(0.85f, 0.8f, 0.75f));
+        shader.setInt("textureType", 0);
+        shader.setFloat("ambientStrength",  0.10f);
+        shader.setFloat("diffuseStrength",  0.85f);
+        shader.setFloat("specularStrength", 0.50f);
+        shader.setFloat("shininess", 48.0f);
+        glBindVertexArray(coneVAO);
+        glDrawElements(GL_TRIANGLES, coneCount, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
+    }
 }
 
 void setupLighting(Shader& shader)
