@@ -212,29 +212,15 @@ void main()
     vec3 baseColor;
     
     if (useTexture == 1) {
-        // Mode 1 – SIMPLE TEXTURE
-        // The image texture is used directly as the base color.
-        // No surface color blending: purely the texel color.
+        // State 1: brick-wall.jpg
         baseColor = texture(texture1, uv).rgb;
         
     } else if (useTexture == 2) {
-        // Mode 2 – VERTEX-BLENDED TEXTURE
-        // Color computed at the VERTEX stage (VertexColor) is mixed with the image texture
-        // at the FRAGMENT stage. This shows how per-vertex color can enrich a texture.
-        vec3 imgColor = texture(texture2, uv).rgb;
-        baseColor = mix(VertexColor, imgColor, 0.55);
-        
-    } else if (useTexture == 3) {
-        // Mode 3 – FRAGMENT-BLENDED TEXTURE
-        // The blend factor is computed per-fragment from world-space height (FragPos.y).
-        // Higher points get more of the image texture; lower points keep objectColor.
-        // This is a purely fragment-stage computation.
-        float blendFactor = clamp(FragPos.y / 3.5, 0.0, 1.0);
-        vec3 imgColor = texture(texture1, uv).rgb;
-        baseColor = mix(objectColor, imgColor, blendFactor);
+        // State 2: container.jpg
+        baseColor = texture(texture2, uv).rgb;
         
     } else {
-        // Mode 0 – PROCEDURAL only (existing behavior)
+        // State 0: STARTING STATE (Procedural / base objectColor)
         baseColor = objectColor;
         vec2 procUV = FragPos.xz * 0.1;
         if      (textureType == 0) baseColor = proceduralConcrete(procUV, objectColor);

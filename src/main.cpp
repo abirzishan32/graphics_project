@@ -158,7 +158,7 @@ int main()
     unsigned int coneVAO = createConeVAO(coneCount);
     // Load image textures using stb_image (GL_REPEAT + trilinear mipmapping)
     unsigned int texBrick     = loadTexture("brick-wall.jpg");
-    unsigned int texContainer = loadTexture("container.png");
+    unsigned int texContainer = loadTexture("container.jpg");
 
     // Render loop
     while (!glfwWindowShouldClose(window)) {
@@ -288,7 +288,7 @@ void processInput(GLFWwindow *window)
     // 0 = procedural, 1 = simple texture, 2 = vertex-blended, 3 = fragment-blended
     if (glfwGetKey(window, GLFW_KEY_3) == GLFW_PRESS) {
         if (!threeKeyPressed) {
-            useTexture = (useTexture + 1) % 4;
+            useTexture = (useTexture + 1) % 3;
             threeKeyPressed = true;
         }
     } else {
@@ -593,6 +593,8 @@ unsigned int createCurvedBarrierVAO(int& outVertexCount) {
 //  - Below ceiling point lights (gets white diffuse + specular from above)
 //  - Near entrance bar lights (gets warm golden specular from the side)
 void drawCurvedBarrier(Shader& shader, unsigned int VAO, int vertexCount) {
+    // Allow curved surface texture to change
+    shader.setInt("useTexture", useTexture);
     // --- Barrier 1: Driver-side center divider, near entrance ---
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, glm::vec3(LOT_WIDTH/2.0f - 7.0f, 0.0f, LOT_DEPTH * 0.25f));
@@ -1087,12 +1089,14 @@ void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, 
     glm::vec3 yellowColor(0.95f, 0.85f, 0.2f);
     
     // === FLOOR ===
+    shader.setInt("useTexture", useTexture); // Allow floor texture to change
     glm::mat4 floorModel = glm::mat4(1.0f);
     floorModel = glm::translate(floorModel, glm::vec3(LOT_WIDTH/2, 0.0f, LOT_DEPTH/2));
     floorModel = glm::scale(floorModel, glm::vec3(LOT_WIDTH, 1.0f, LOT_DEPTH));
     drawQuad(shader, quadVAO, floorModel, concreteColor, 0, 0.15f, 0.7f, 0.2f, 16.0f);
     
     // === CEILING ===
+    shader.setInt("useTexture", 0); // Ceiling remains starting state
     glm::mat4 ceilingModel = glm::mat4(1.0f);
     ceilingModel = glm::translate(ceilingModel, glm::vec3(LOT_WIDTH/2, CEILING_HEIGHT, LOT_DEPTH/2));
     ceilingModel = glm::rotate(ceilingModel, glm::radians(180.0f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -1100,6 +1104,7 @@ void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, 
     drawQuad(shader, quadVAO, ceilingModel, ceilingColor, 0, 0.1f, 0.5f, 0.1f, 8.0f);
     
     // === WALLS ===
+    shader.setInt("useTexture", useTexture); // Allow walls texture to change
     // Back wall (Z = 0)
     drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH/2, CEILING_HEIGHT/2, -WALL_THICKNESS/2),
              glm::vec3(LOT_WIDTH, CEILING_HEIGHT, WALL_THICKNESS), concreteColor, 0, 0.12f, 0.6f, 0.15f, 12.0f);
@@ -1140,6 +1145,7 @@ void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, 
              glm::vec3(WALL_THICKNESS, CEILING_HEIGHT, LOT_DEPTH), concreteColor, 0, 0.12f, 0.6f, 0.15f, 12.0f);
     
     // === SUPPORT PILLARS ===
+    shader.setInt("useTexture", 0); // Pillars remain starting state
     float pillarSpacingX = 12.0f;
     float pillarSpacingZ = 10.0f;
     for (float x = pillarSpacingX; x < LOT_WIDTH - 1.0f; x += pillarSpacingX) {
@@ -1912,6 +1918,9 @@ void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVA
 
 // Helper function to draw the entire scene
 void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO) {
+    // Reset texture mode to 0 (default starting state) for scene objects that shouldn't change
+    shader.setInt("useTexture", 0);
+
     // Draw outdoor environment first
     drawOutdoorEnvironment(shader, cubeVAO, quadVAO, cylVAO);
 
