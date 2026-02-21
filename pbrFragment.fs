@@ -158,21 +158,28 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 baseColor) {
 }
 
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 baseColor) {
-    vec3 lightDir = normalize(light.position - fragPos); // Rays diverge from a point, direction depends on fragment position.
+    // Point lights illuminate in all directions, fading over distance (attenuation).
+    // We calculate the direction from fragment towards light.
+    vec3 lightDir = normalize(light.position - fragPos);
     
+    // Attenuation calculation derived from physical light behavior:
+    // f_att = 1.0 / (K_c + K_l * d + K_q * d^2)
     float distance = length(light.position - fragPos);
     float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
     
     vec3 ambient = light.ambient * ambientStrength * baseColor;
     
+    // Measures how directly the light hits the surface
     float NdotL = max(dot(normal, lightDir), 0.0);
     vec3 diffuse = light.diffuse * diffuseStrength * NdotL * baseColor;
     
+    // Specular reflection
     vec3 reflectDir = reflect(-lightDir, normal);
     float RdotV = max(dot(reflectDir, viewDir), 0.0);
     float spec = pow(RdotV, shininess);
     vec3 specular = light.specular * specularStrength * spec;
     
+    // Apply attenuation to all components
     ambient *= attenuation;
     diffuse *= attenuation;
     specular *= attenuation;

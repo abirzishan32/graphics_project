@@ -46,6 +46,8 @@ void drawDirectionalArrow(Shader& shader, unsigned int cubeVAO, glm::vec3 positi
 void drawSpeedBump(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float width);
 void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO);
 void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO);
+unsigned int createCurvedBarrierVAO(int& outVertexCount);
+void drawCurvedBarrier(Shader& shader, unsigned int VAO, int vertexCount);
 
 // Settings (Window size in points, may differ from pixels on Retina)
 unsigned int SCR_WIDTH = 1400;
@@ -119,6 +121,8 @@ int main()
     unsigned int quadVAO = createQuadVAO();
     unsigned int cylVAO = createCylinderVAO(16);
     unsigned int wedgeVAO = createWedgeVAO();
+    int curvedBarrierCount = 0;
+    unsigned int curvedBarrierVAO = createCurvedBarrierVAO(curvedBarrierCount);
 
     // Render loop
     while (!glfwWindowShouldClose(window)) {
@@ -150,6 +154,7 @@ int main()
         shader.setMat4("view", view1);
         shader.setVec3("viewPos", camPos1);
         drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+        drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
 
         // --- 2. Top-Right: Inside Back-Right Corner ---
         glViewport((int)width, (int)height, (int)width, (int)height);
@@ -159,6 +164,7 @@ int main()
         shader.setMat4("view", view2);
         shader.setVec3("viewPos", camPos2);
         drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+        drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
 
         // --- 3. Bottom-Left: Inside Front-Left Corner ---
         glViewport(0, 0, (int)width, (int)height);
@@ -168,6 +174,7 @@ int main()
         shader.setMat4("view", view3);
         shader.setVec3("viewPos", camPos3);
         drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+        drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
 
         // --- 4. Bottom-Right: Interactive View ---
         glViewport((int)width, 0, (int)width, (int)height);
@@ -177,6 +184,7 @@ int main()
         shader.setMat4("view", viewInteractive);
         shader.setVec3("viewPos", camera.Position);
         drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+        drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -453,6 +461,112 @@ unsigned int createWedgeVAO()
     return VAO;
 }
 
+// ============================================================
+// Curved Concrete Barrier: Tessellated Half-Cylinder Arc
+// Demonstrates Full Phong Illumination (Ambient + Diffuse + Specular)
+// with Multiple Light Sources (Ceiling Lights + Entrance Bar Lights)
+// Each vertex has an analytically correct smooth normal for accurate
+// per-fragment Phong shading across the curved surface.
+// ============================================================
+unsigned int createCurvedBarrierVAO(int& outVertexCount) {
+    const int slices = 40;  // angular resolution (smoothness)
+    const int stacks = 20;  // length segments along the Z axis
+    const float radius = 0.9f;
+    const float length = 12.0f;
+    const float PI = 3.14159265358979f;
+    
+    // Vertex layout: pos(3) + normal(3) + texcoord(2) = 8 floats
+    std::vector<float> vertices;
+    std::vector<unsigned int> indices;
+    
+    for (int j = 0; j <= stacks; j++) {
+        float z = (float)j / (float)stacks * length;
+        for (int i = 0; i <= slices; i++) {
+            // Angle sweeps 0 -> PI (upper half-circle only)
+            float angle = (float)i / (float)slices * PI;
+            float x = radius * cos(angle);
+            float y = radius * sin(angle);
+            
+            // Analytical normal: radial direction on a cylinder
+            // Normal = normalize(cos(angle), sin(angle), 0)
+            // which is already a unit vector by construction
+            float nx = cos(angle);
+            float ny = sin(angle);
+            float nz = 0.0f;
+            
+            float u = (float)i / (float)slices;
+            float v = (float)j / (float)stacks;
+            
+            vertices.insert(vertices.end(), {x, y, z, nx, ny, nz, u, v});
+        }
+    }
+    
+    // Two triangles (CCW winding) per quad for correct face culling
+    for (int j = 0; j < stacks; j++) {
+        for (int i = 0; i < slices; i++) {
+            unsigned int tl = j * (slices + 1) + i;
+            unsigned int tr = tl + 1;
+            unsigned int bl = (j + 1) * (slices + 1) + i;
+            unsigned int br = bl + 1;
+            indices.push_back(tl); indices.push_back(bl); indices.push_back(tr);
+            indices.push_back(tr); indices.push_back(bl); indices.push_back(br);
+        }
+    }
+    
+    outVertexCount = (int)indices.size();
+    
+    unsigned int VAO, VBO, EBO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+    // Position attribute (location = 0)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // Normal attribute (location = 1) - smooth analytical normals for Phong shading
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    // TexCoord attribute (location = 2)
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glBindVertexArray(0);
+    return VAO;
+}
+
+// Draw the curved concrete barrier demonstrating Phong + Multiple Lights.
+// The curved surface is placed:
+//  - Below ceiling point lights (gets white diffuse + specular from above)
+//  - Near entrance bar lights (gets warm golden specular from the side)
+void drawCurvedBarrier(Shader& shader, unsigned int VAO, int vertexCount) {
+    // --- Barrier 1: Driver-side center divider, near entrance ---
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(LOT_WIDTH/2.0f - 7.0f, 0.0f, LOT_DEPTH * 0.25f));
+    model = glm::rotate(model, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    shader.setMat4("model", model);
+    // Polished concrete: moderate specular so Phong highlights are visible
+    shader.setVec3("objectColor",     glm::vec3(0.80f, 0.76f, 0.72f));
+    shader.setInt("textureType",      0);     // concrete
+    shader.setFloat("ambientStrength",  0.15f);
+    shader.setFloat("diffuseStrength",  0.85f);
+    shader.setFloat("specularStrength", 0.60f);
+    shader.setFloat("shininess",        64.0f);
+    glBindVertexArray(VAO);
+    glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+    
+    // --- Barrier 2: Passenger-side, symmetric mirror ---
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(LOT_WIDTH/2.0f + 7.0f, 0.0f, LOT_DEPTH * 0.25f));
+    shader.setMat4("model", model);
+    glBindVertexArray(VAO);
+    glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+}
+
 void setupLighting(Shader& shader)
 {
     // Pass general light status to shader for ambient/emissive components
@@ -503,8 +617,8 @@ void setupLighting(Shader& shader)
                 shader.setVec3(base + ".diffuse", glm::vec3(1.4f, 1.3f, 1.1f));
                 shader.setVec3(base + ".specular", glm::vec3(1.3f, 1.2f, 1.0f));
                 shader.setFloat(base + ".constant", 1.0f);
-                shader.setFloat(base + ".linear", 0.045f);
-                shader.setFloat(base + ".quadratic", 0.0075f);
+                shader.setFloat(base + ".linear", 0.09f);
+                shader.setFloat(base + ".quadratic", 0.032f);
                 lightIdx++;
             }
         }
@@ -520,8 +634,8 @@ void setupLighting(Shader& shader)
         shader.setVec3(rodLeft + ".diffuse", glm::vec3(1.3f, 1.0f, 0.7f));
         shader.setVec3(rodLeft + ".specular", glm::vec3(1.2f, 1.0f, 0.8f));
         shader.setFloat(rodLeft + ".constant", 1.0f);
-        shader.setFloat(rodLeft + ".linear", 0.14f);
-        shader.setFloat(rodLeft + ".quadratic", 0.07f);
+        shader.setFloat(rodLeft + ".linear", 0.09f);
+        shader.setFloat(rodLeft + ".quadratic", 0.032f);
         
         // Right rod light
         std::string rodRight = "pointLights[13]";
@@ -530,8 +644,8 @@ void setupLighting(Shader& shader)
         shader.setVec3(rodRight + ".diffuse", glm::vec3(1.3f, 1.0f, 0.7f));
         shader.setVec3(rodRight + ".specular", glm::vec3(1.2f, 1.0f, 0.8f));
         shader.setFloat(rodRight + ".constant", 1.0f);
-        shader.setFloat(rodRight + ".linear", 0.14f);
-        shader.setFloat(rodRight + ".quadratic", 0.07f);
+        shader.setFloat(rodRight + ".linear", 0.09f);
+        shader.setFloat(rodRight + ".quadratic", 0.032f);
         
         if (totalPointLights < 14) totalPointLights = 14; 
     }
@@ -1476,4 +1590,5 @@ void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsig
     
     // Draw parking lot signage and safety features
     drawParkingSignage(shader, cubeVAO, cylVAO);
+    // Note: drawCurvedBarrier is called separately from main() because it needs curvedBarrierVAO
 }
