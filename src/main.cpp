@@ -71,8 +71,11 @@ bool firstMouse = true;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
-// Lights toggle (L key to toggle)
-bool lightsOn = true;
+// Lights toggle
+bool ceilingLightsOn = true;
+bool entranceLightsOn = true;
+bool oneKeyPressed = false;
+bool twoKeyPressed = false;
 bool lKeyPressed = false;
 
 int main()
@@ -201,10 +204,32 @@ void processInput(GLFWwindow *window)
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         camera.ProcessKeyboard(RIGHT, deltaTime);
     
-    // L key to toggle lights on/off
+    // 1 key to toggle entrance lights
+    if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) {
+        if (!oneKeyPressed) {
+            entranceLightsOn = !entranceLightsOn;
+            oneKeyPressed = true;
+        }
+    } else {
+        oneKeyPressed = false;
+    }
+
+    // 2 key to toggle ceiling lights
+    if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS) {
+        if (!twoKeyPressed) {
+            ceilingLightsOn = !ceilingLightsOn;
+            twoKeyPressed = true;
+        }
+    } else {
+        twoKeyPressed = false;
+    }
+
+    // L key for master toggle (optional convenience)
     if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
         if (!lKeyPressed) {
-            lightsOn = !lightsOn;
+            bool newState = !(ceilingLightsOn || entranceLightsOn);
+            ceilingLightsOn = newState;
+            entranceLightsOn = newState;
             lKeyPressed = true;
         }
     } else {
@@ -430,8 +455,8 @@ unsigned int createWedgeVAO()
 
 void setupLighting(Shader& shader)
 {
-    // Pass light toggle state to shader
-    shader.setBool("lightsOn", lightsOn);
+    // Pass general light status to shader for ambient/emissive components
+    shader.setBool("lightsOn", ceilingLightsOn || entranceLightsOn);
     
     // Window positions for volumetric scattering (4 windows)
     shader.setInt("numWindows", 4);
@@ -443,29 +468,32 @@ void setupLighting(Shader& shader)
     }
     shader.setVec3("sunDirection", glm::normalize(glm::vec3(1.0f, -0.5f, 0.2f)));
     
-    // Directional light (sunlight through windows) - ALWAYS ON for ambient window light
+    // Directional light (sunlight through windows)
     shader.setBool("useDirLight", true);
     shader.setVec3("dirLight.direction", glm::vec3(-0.5f, -0.7f, -0.3f));
     
-    if (lightsOn) {
-        // Full lighting when lights are on
+    // Base ambient when everything is off
+    if (!ceilingLightsOn && !entranceLightsOn) {
+        shader.setVec3("dirLight.ambient", glm::vec3(0.03f, 0.035f, 0.04f));
+        shader.setVec3("dirLight.diffuse", glm::vec3(0.15f, 0.14f, 0.12f));
+        shader.setVec3("dirLight.specular", glm::vec3(0.1f, 0.1f, 0.08f));
+    } else {
         shader.setVec3("dirLight.ambient", glm::vec3(0.25f, 0.22f, 0.18f));
         shader.setVec3("dirLight.diffuse", glm::vec3(1.2f, 1.1f, 0.9f));
         shader.setVec3("dirLight.specular", glm::vec3(1.2f, 1.15f, 1.0f));
-        
-        // Point lights (ceiling-mounted fixtures) - INCREASED INTENSITY
-        int numLights = 12;
-        shader.setInt("numPointLights", numLights);
-        
+    }
+
+    int totalPointLights = 0;
+
+    // --- Ceiling Lights (Indices 0-11) ---
+    if (ceilingLightsOn) {
         float lightSpacingX = LOT_WIDTH / 4.0f;
         float lightSpacingZ = LOT_DEPTH / 3.0f;
         int lightIdx = 0;
-        
-        for (int i = 0; i < 4 && lightIdx < numLights; i++) {
-            for (int j = 0; j < 3 && lightIdx < numLights; j++) {
+        for (int i = 0; i < 4 && lightIdx < 12; i++) {
+            for (int j = 0; j < 3 && lightIdx < 12; j++) {
                 float x = lightSpacingX * (i + 0.5f);
                 float z = lightSpacingZ * (j + 0.5f);
-                
                 std::string base = "pointLights[" + std::to_string(lightIdx) + "]";
                 shader.setVec3(base + ".position", glm::vec3(x, CEILING_HEIGHT - 0.3f, z));
                 shader.setVec3(base + ".ambient", glm::vec3(0.18f, 0.16f, 0.12f));
@@ -477,17 +505,17 @@ void setupLighting(Shader& shader)
                 lightIdx++;
             }
         }
-        // === ENTRANCE ROD LIGHTS (2 rod lights at entrance) ===
-        // These are vertical rod lights on both sides of the entrance
-        // Point lights 12 and 13 (index after ceiling lights)
-        shader.setInt("numPointLights", numLights + 2);
-        
+        totalPointLights = 12;
+    }
+
+    // --- Entrance Rod Lights (Indices 12-13) ---
+    if (entranceLightsOn) {
         // Left rod light
         std::string rodLeft = "pointLights[12]";
         shader.setVec3(rodLeft + ".position", glm::vec3(LOT_WIDTH/2 - 6.0f, 1.5f, LOT_DEPTH - 1.0f));
-        shader.setVec3(rodLeft + ".ambient", glm::vec3(0.15f, 0.12f, 0.08f));   // Warm ambient
-        shader.setVec3(rodLeft + ".diffuse", glm::vec3(1.3f, 1.0f, 0.7f));      // Warm golden diffuse
-        shader.setVec3(rodLeft + ".specular", glm::vec3(1.2f, 1.0f, 0.8f));     // Strong specular
+        shader.setVec3(rodLeft + ".ambient", glm::vec3(0.15f, 0.12f, 0.08f));
+        shader.setVec3(rodLeft + ".diffuse", glm::vec3(1.3f, 1.0f, 0.7f));
+        shader.setVec3(rodLeft + ".specular", glm::vec3(1.2f, 1.0f, 0.8f));
         shader.setFloat(rodLeft + ".constant", 1.0f);
         shader.setFloat(rodLeft + ".linear", 0.14f);
         shader.setFloat(rodLeft + ".quadratic", 0.07f);
@@ -502,15 +530,33 @@ void setupLighting(Shader& shader)
         shader.setFloat(rodRight + ".linear", 0.14f);
         shader.setFloat(rodRight + ".quadratic", 0.07f);
         
-    } else {
-        // Lights OFF - only very dim ambient from windows
-        shader.setVec3("dirLight.ambient", glm::vec3(0.03f, 0.035f, 0.04f));
-        shader.setVec3("dirLight.diffuse", glm::vec3(0.15f, 0.14f, 0.12f));
-        shader.setVec3("dirLight.specular", glm::vec3(0.1f, 0.1f, 0.08f));
-        
-        // Turn off point lights completely
-        shader.setInt("numPointLights", 0);
+        if (totalPointLights < 14) totalPointLights = 14; 
     }
+
+    // If one system is off but the other is on, we still need to make sure the "off" lights aren't contributing
+    // Actually, shader expects numPointLights. We should probably only pass the lights that are ON, 
+    // BUT the indices are fixed in my logic (12-13 for entrance).
+    // Let's adjust to pass all 14 and zero out the ones that are off if necessary, 
+    // OR just set numPointLights to 14 and ensure the "off" ones have 0 intensity.
+
+    if (!ceilingLightsOn) {
+        for (int i = 0; i < 12; i++) {
+            std::string base = "pointLights[" + std::to_string(i) + "]";
+            shader.setVec3(base + ".diffuse", glm::vec3(0.0f));
+            shader.setVec3(base + ".specular", glm::vec3(0.0f));
+            shader.setVec3(base + ".ambient", glm::vec3(0.0f));
+        }
+    }
+    if (!entranceLightsOn) {
+        for (int i = 12; i < 14; i++) {
+            std::string base = "pointLights[" + std::to_string(i) + "]";
+            shader.setVec3(base + ".diffuse", glm::vec3(0.0f));
+            shader.setVec3(base + ".specular", glm::vec3(0.0f));
+            shader.setVec3(base + ".ambient", glm::vec3(0.0f));
+        }
+    }
+
+    shader.setInt("numPointLights", (ceilingLightsOn || entranceLightsOn) ? 14 : 0);
 }
 
 void drawCube(Shader& shader, unsigned int VAO, glm::vec3 position, glm::vec3 scale, 
@@ -757,8 +803,10 @@ void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, 
             drawCube(shader, cubeVAO, glm::vec3(x, CEILING_HEIGHT - 0.15f, z),
                      glm::vec3(1.2f, 0.1f, 0.4f), glm::vec3(0.8f, 0.8f, 0.82f), 3, 0.2f, 0.6f, 0.7f, 48.0f);
             // Light panel (emissive look)
+            glm::vec3 panelColor = ceilingLightsOn ? glm::vec3(1.0f, 0.98f, 0.9f) : glm::vec3(0.2f, 0.18f, 0.15f);
             drawCube(shader, cubeVAO, glm::vec3(x, CEILING_HEIGHT - 0.22f, z),
-                     glm::vec3(1.0f, 0.05f, 0.3f), glm::vec3(1.0f, 0.98f, 0.9f), 4, 0.9f, 0.3f, 0.2f, 8.0f);
+                     glm::vec3(1.0f, 0.05f, 0.3f), panelColor, 4, 
+                     ceilingLightsOn ? 0.9f : 0.1f, 0.3f, 0.2f, 8.0f);
         }
     }
     
@@ -1367,7 +1415,7 @@ void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVA
     glm::vec3 rodHousing(0.2f, 0.2f, 0.22f);      // Dark metal housing
     glm::vec3 rodLightOn(1.0f, 0.85f, 0.55f);     // Warm golden glow when ON
     glm::vec3 rodLightOff(0.15f, 0.12f, 0.1f);    // Dim when OFF
-    glm::vec3 rodLight = lightsOn ? rodLightOn : rodLightOff;
+    glm::vec3 rodLight = entranceLightsOn ? rodLightOn : rodLightOff;
     
     float rodX1 = LOT_WIDTH/2 - 6.0f;
     float rodX2 = LOT_WIDTH/2 + 6.0f;
@@ -1385,7 +1433,7 @@ void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVA
     // Light tube (glowing) - facing INWARD toward parking lot
     drawCube(shader, cubeVAO, glm::vec3(rodX1, rodHeight/2, rodZ - rodRadius * 3),
              glm::vec3(rodRadius * 1.5f, rodHeight * 0.7f, rodRadius * 1.5f), rodLight, 1, 
-             lightsOn ? 0.9f : 0.15f, lightsOn ? 0.3f : 0.5f, lightsOn ? 0.1f : 0.3f, 8.0f);
+             entranceLightsOn ? 0.9f : 0.15f, entranceLightsOn ? 0.3f : 0.5f, entranceLightsOn ? 0.1f : 0.3f, 8.0f);
     // Top cap
     drawCube(shader, cubeVAO, glm::vec3(rodX1, rodHeight + 0.05f, rodZ),
              glm::vec3(0.15f, 0.1f, 0.15f), rodHousing, 3, 0.1f, 0.5f, 0.6f, 32.0f);
@@ -1400,13 +1448,13 @@ void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVA
     // Light tube (glowing) - facing INWARD toward parking lot
     drawCube(shader, cubeVAO, glm::vec3(rodX2, rodHeight/2, rodZ - rodRadius * 3),
              glm::vec3(rodRadius * 1.5f, rodHeight * 0.7f, rodRadius * 1.5f), rodLight, 1, 
-             lightsOn ? 0.9f : 0.15f, lightsOn ? 0.3f : 0.5f, lightsOn ? 0.1f : 0.3f, 8.0f);
+             entranceLightsOn ? 0.9f : 0.15f, entranceLightsOn ? 0.3f : 0.5f, entranceLightsOn ? 0.1f : 0.3f, 8.0f);
     // Top cap
     drawCube(shader, cubeVAO, glm::vec3(rodX2, rodHeight + 0.05f, rodZ),
              glm::vec3(0.15f, 0.1f, 0.15f), rodHousing, 3, 0.1f, 0.5f, 0.6f, 32.0f);
     
     // Ground light pools from rod lights (when ON)
-    if (lightsOn) {
+    if (entranceLightsOn) {
         glm::vec3 poolColor(1.0f, 0.85f, 0.55f);
         drawCube(shader, cubeVAO, glm::vec3(rodX1, 0.015f, rodZ + 0.5f),
                  glm::vec3(2.0f, 0.02f, 2.5f), poolColor * 0.2f, 1, 0.6f, 0.4f, 0.1f, 4.0f);
