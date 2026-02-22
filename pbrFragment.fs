@@ -53,8 +53,8 @@ uniform vec3 sunDirection;
 // ============================================================
 // Texture Uniforms
 // ============================================================
-uniform sampler2D texture1;    // brick-wall.jpg (unit 0)
-uniform sampler2D texture2;    // container.png  (unit 1)
+uniform sampler2D texture1;    // brick-wall
+uniform sampler2D texture2;    // container
 
 // useTexture modes:
 //   0 = procedural only (no image texture)
@@ -145,14 +145,14 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, v
     float distance    = length(light.position - fragPos);
     float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
     
-    // Ambient: constant scattered fill light
+    // Ambient
     vec3 ambient  = light.ambient * ambientStrength * baseColor;
     
-    // Diffuse: measures how directly the light hits the surface (Lambertian)
+    // Diffuse
     float NdotL   = max(dot(normal, lightDir), 0.0);
     vec3 diffuse  = light.diffuse * diffuseStrength * NdotL * baseColor;
     
-    // Specular: mirror-like highlight (Phong reflection model)
+    // Specular
     vec3 reflectDir = reflect(-lightDir, normal);
     float RdotV   = max(dot(reflectDir, viewDir), 0.0);
     float spec    = pow(RdotV, shininess);
@@ -204,7 +204,7 @@ void main()
 {
     vec3 norm    = normalize(Normal);
     vec3 viewDir = normalize(viewPos - FragPos);
-    vec2 uv      = TexCoords;  // Use the per-vertex interpolated UV
+    vec2 uv      = TexCoords; 
     
     // --------------------------------------------------------
     // Determine base color according to texture mode
@@ -212,13 +212,13 @@ void main()
     vec3 baseColor;
     
     if (useTexture == 1) {
-        // State 1: brick-wall.jpg
+        // State 1: brick-wall
         vec3 imgColor = texture(texture1, uv).rgb;
         if (textureType == 4) baseColor = mix(objectColor, imgColor, 0.5);
         else baseColor = imgColor;
         
     } else if (useTexture == 2) {
-        // State 2: container.jpg
+        // State 2: container
         vec3 imgColor = texture(texture2, uv).rgb;
         if (textureType == 4) baseColor = mix(objectColor, imgColor, 0.5);
         else baseColor = imgColor;
@@ -249,7 +249,7 @@ void main()
         result += CalcPointLight(pointLights[i], norm, FragPos, viewDir, baseColor);
     }
     
-    // 3. Global ambient fallback (prevents fully black surfaces)
+    // 3. Global ambient fallback
     vec3 globalAmbient = baseColor * (lightsOn ? 0.1 : 0.02);
     result += globalAmbient;
     

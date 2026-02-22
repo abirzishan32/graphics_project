@@ -678,8 +678,6 @@ unsigned int loadTexture(const char* path) {
 
 // ============================================================
 // Sphere VAO (UV sphere)
-// Positions + smooth normals (radial) + UV coordinates
-// Used for: textured sphere showing Phong highlights + image texture
 // ============================================================
 unsigned int createSphereVAO(int& outVertexCount) {
     const int stacks = 32;
@@ -940,8 +938,8 @@ void setupLighting(Shader& shader)
         std::string base = "windowPositions[" + std::to_string(i) + "]";
         shader.setVec3(base, glm::vec3(0.0f, 2.5f, z));
     }
+
     // Unified Sun Direction (from window towards parking lot)
-    // Windows are on negative X wall, so light direction is positive X and down/forward
     glm::vec3 sunDir = glm::normalize(glm::vec3(1.0f, -0.6f, 0.4f)); 
     shader.setVec3("sunDirection", sunDir);
     
