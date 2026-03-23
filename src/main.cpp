@@ -110,6 +110,8 @@ bool threeKeyPressed = false;
 bool showFourViewports = true;
 bool vKeyPressed = false;
 bool eKeyPressed = false;
+bool spaceKeyPressed = false;
+const char* BASE_WINDOW_TITLE = "Shoppning Mall";
 
 unsigned int texElevatorPanelBase = 0;     // wood-like base texture
 unsigned int texElevatorButtons = 0;       // button overlay texture
@@ -326,7 +328,7 @@ int main()
 
 
     // Create window
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Shoppning Mall", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, BASE_WINDOW_TITLE, NULL, NULL);
     if (window == NULL) {
         std::cout << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
@@ -506,6 +508,20 @@ void processInput(GLFWwindow *window)
         eKeyPressed = false;
     }
 
+    // SPACE key: call elevator to current floor when user is outside near door
+    // and elevator cabin is currently on a different floor.
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+        if (!spaceKeyPressed && outsideElevatorForInput) {
+            int landingFloor = elevator.floorFromY(camera.Position.y);
+            if (landingFloor != elevator.currentFloor || elevator.state == Elevator::State::MOVING) {
+                elevator.requestFromOutside(landingFloor);
+            }
+            spaceKeyPressed = true;
+        }
+    } else {
+        spaceKeyPressed = false;
+    }
+
     // Elevator floor buttons: 0=G, 1..5 = upper floors
     for (int floor = 0; floor <= TOP_FLOOR_INDEX; ++floor) {
         int key = (floor == 0) ? GLFW_KEY_0 : (GLFW_KEY_1 + floor - 1);
@@ -552,6 +568,8 @@ void processInput(GLFWwindow *window)
     } else {
         vKeyPressed = false;
     }
+
+    
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
@@ -1256,6 +1274,32 @@ void drawElevatorSystem(Shader& shader, unsigned int cubeVAO)
              glm::vec3(elevator.shaftCenter.x + cableOffsetX, cableCenterY, cableZ),
              glm::vec3(cableThickness, cableLength, cableThickness),
              cableColor, 6, 0.09f, 0.5f, 0.9f, 120.0f);
+
+    // Cable motion indicators while elevator is traveling between floors.
+    if (elevator.state == Elevator::State::MOVING && cableLength > 0.2f) {
+        float tNow = glfwGetTime();
+        float moveDir = (elevator.targetFloor > elevator.currentFloor) ? 1.0f : -1.0f;
+        glm::vec3 markerColor(0.86f, 0.88f, 0.92f);
+        int markerCount = 4;
+
+        for (int i = 0; i < markerCount; ++i) {
+            float phase = std::fmod(tNow * 1.6f * moveDir + i * 0.24f, 1.0f);
+            if (phase < 0.0f) phase += 1.0f;
+            float markerY = cabinRoofY + phase * cableLength;
+
+            float pulse = 0.75f + 0.25f * std::sin(tNow * 10.0f + i * 1.3f);
+            glm::vec3 animatedColor = markerColor * pulse;
+
+            drawCube(shader, cubeVAO,
+                     glm::vec3(elevator.shaftCenter.x - cableOffsetX, markerY, cableZ),
+                     glm::vec3(cableThickness * 1.55f, 0.08f, cableThickness * 1.55f),
+                     animatedColor, 3, 0.12f, 0.55f, 0.95f, 160.0f);
+            drawCube(shader, cubeVAO,
+                     glm::vec3(elevator.shaftCenter.x + cableOffsetX, markerY, cableZ),
+                     glm::vec3(cableThickness * 1.55f, 0.08f, cableThickness * 1.55f),
+                     animatedColor, 3, 0.12f, 0.55f, 0.95f, 160.0f);
+        }
+    }
 
     // Top cable anchor blocks
     drawCube(shader, cubeVAO,
