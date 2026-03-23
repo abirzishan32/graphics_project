@@ -324,7 +324,7 @@ int main()
 
 
     // Create window
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "3D Parking Lot - Phong Illumination", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Shoppning Mall", NULL, NULL);
     if (window == NULL) {
         std::cout << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
@@ -1208,6 +1208,35 @@ void drawElevatorSystem(Shader& shader, unsigned int cubeVAO)
     float wallThickness = 0.06f;
     glm::vec3 cabinFrameColor(0.22f, 0.23f, 0.25f);
     glm::vec3 mirrorColor(0.78f, 0.80f, 0.85f);
+
+    // Twin hanging wire cables (dynamic length based on cabin height)
+    float shaftTopY = shaftHeight - 0.03f;
+    float cabinRoofY = cabinY + elevator.cabinHeight * 0.5f - 0.03f;
+    float cableLength = std::max(0.12f, shaftTopY - cabinRoofY);
+    float cableCenterY = cabinRoofY + cableLength * 0.5f;
+    float cableThickness = 0.045f;
+    float cableOffsetX = elevator.cabinWidth * 0.28f;
+    float cableZ = elevator.shaftCenter.z - elevator.cabinDepth * 0.28f;
+    glm::vec3 cableColor(0.64f, 0.67f, 0.70f);
+
+    drawCube(shader, cubeVAO,
+             glm::vec3(elevator.shaftCenter.x - cableOffsetX, cableCenterY, cableZ),
+             glm::vec3(cableThickness, cableLength, cableThickness),
+             cableColor, 6, 0.09f, 0.5f, 0.9f, 120.0f);
+    drawCube(shader, cubeVAO,
+             glm::vec3(elevator.shaftCenter.x + cableOffsetX, cableCenterY, cableZ),
+             glm::vec3(cableThickness, cableLength, cableThickness),
+             cableColor, 6, 0.09f, 0.5f, 0.9f, 120.0f);
+
+    // Top cable anchor blocks
+    drawCube(shader, cubeVAO,
+             glm::vec3(elevator.shaftCenter.x - cableOffsetX, shaftTopY - 0.03f, cableZ),
+             glm::vec3(0.10f, 0.06f, 0.10f),
+             glm::vec3(0.38f, 0.40f, 0.44f), 3, 0.08f, 0.45f, 0.6f, 96.0f);
+    drawCube(shader, cubeVAO,
+             glm::vec3(elevator.shaftCenter.x + cableOffsetX, shaftTopY - 0.03f, cableZ),
+             glm::vec3(0.10f, 0.06f, 0.10f),
+             glm::vec3(0.38f, 0.40f, 0.44f), 3, 0.08f, 0.45f, 0.6f, 96.0f);
 
     // Cabin floor/roof
     drawCube(shader, cubeVAO,

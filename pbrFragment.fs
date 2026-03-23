@@ -67,7 +67,7 @@ uniform sampler2D texture2;    // container
 uniform int useTexture;
 
 // Procedural texture type (used when useTexture == 0)
-// 0=concrete, 1=painted line, 2=car paint, 3=metal, 5=mirror
+// 0=concrete, 1=painted line, 2=car paint, 3=metal, 5=mirror, 6=elevator cable
 uniform int textureType;
 
 
@@ -211,6 +211,18 @@ vec3 proceduralMirror(vec3 baseColor, vec3 viewDir, vec3 normal) {
     return mix(baseColor, envColor, 0.75 + 0.2 * fresnel) + metallicTint * fresnel;
 }
 
+vec3 proceduralElevatorCable(vec3 worldPos, vec3 baseColor) {
+    float helixA = sin(worldPos.y * 240.0 + worldPos.x * 180.0);
+    float helixB = sin(worldPos.y * 240.0 - worldPos.z * 180.0);
+    float strand = (helixA * 0.5 + helixB * 0.5) * 0.5 + 0.5;
+    float micro = fract(sin(dot(floor(worldPos * 600.0), vec3(17.3, 29.7, 47.1))) * 43758.5453);
+
+    float darkBand = smoothstep(0.25, 0.75, strand);
+    vec3 shaded = mix(baseColor * 0.70, baseColor * 1.18, darkBand);
+    shaded += vec3((micro - 0.5) * 0.08);
+    return clamp(shaded, 0.0, 1.0);
+}
+
 // ============================================================
 // Main
 // ============================================================
@@ -268,6 +280,7 @@ void main()
         else if (textureType == 2) baseColor = proceduralCarPaint(procUV, objectColor, viewDir, norm);
         else if (textureType == 3) baseColor = proceduralMetal(procUV, objectColor);
         else if (textureType == 5) baseColor = proceduralMirror(objectColor, viewDir, norm);
+        else if (textureType == 6) baseColor = proceduralElevatorCable(FragPos, objectColor);
     }
     
     // --------------------------------------------------------
