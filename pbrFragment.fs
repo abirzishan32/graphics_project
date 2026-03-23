@@ -16,6 +16,7 @@ uniform float ambientStrength;   // Ka
 uniform float diffuseStrength;   // Kd
 uniform float specularStrength;  // Ks
 uniform float shininess;         // n (exponent)
+uniform float objectAlpha;
 
 // Lights toggle
 uniform bool lightsOn;
@@ -61,6 +62,8 @@ uniform sampler2D texture2;    // container
 //   1 = simple texture (image texture replaces object color, no blend)
 //   2 = vertex-blended (mix image texture with color computed in VERTEX shader)
 //   3 = fragment-blended (mix image texture with object color, factor computed per-fragment)
+//   4 = panel blend (texture1 base + texture2 overlay alpha)
+//   5 = direct digit display (texture1)
 uniform int useTexture;
 
 // Procedural texture type (used when useTexture == 0)
@@ -216,6 +219,9 @@ void main()
     vec3 norm    = normalize(Normal);
     vec3 viewDir = normalize(viewPos - FragPos);
     vec2 uv      = TexCoords; 
+    vec2 sampleUV = uv;
+    float finalAlpha = objectAlpha;
+    bool isDigitDisplay = false;
     
     // --------------------------------------------------------
     // Determine base color according to texture mode
@@ -224,16 +230,35 @@ void main()
 
     if (useTexture == 1) {
         // State 1: brick-wall
-        vec3 imgColor = texture(texture1, uv).rgb;
+        vec3 imgColor = texture(texture1, sampleUV).rgb;
         if (textureType == 4) baseColor = mix(objectColor, imgColor, 0.5);
         else baseColor = imgColor;
         
     } else if (useTexture == 2) {
         // State 2: container
-        vec3 imgColor = texture(texture2, uv).rgb;
+        vec3 imgColor = texture(texture2, sampleUV).rgb;
         if (textureType == 4) baseColor = mix(objectColor, imgColor, 0.5);
         else baseColor = imgColor;
         
+    } else if (useTexture == 4) {
+        // Elevator panel compensation: rotate button texture 180 degrees.
+        if (textureType == 4) {
+            sampleUV = vec2(1.0 - uv.x, 1.0 - uv.y);
+        }
+        vec3 baseTex = texture(texture1, sampleUV).rgb;
+        vec4 overlay = texture(texture2, sampleUV);
+        baseColor = mix(baseTex, overlay.rgb, overlay.a);
+
+    } else if (useTexture == 5) {
+        // Seven-segment display: rotate UV to upright orientation and treat as emissive.
+        if (textureType == 6) {
+            sampleUV = vec2(uv.y, 1.0 - uv.x);
+        }
+        vec4 digitTex = texture(texture1, sampleUV);
+        baseColor = digitTex.rgb;
+        finalAlpha *= max(digitTex.a, 0.75);
+        isDigitDisplay = true;
+
     } else {
         // State 0: STARTING STATE (Procedural / base objectColor)
         baseColor = objectColor;
@@ -249,6 +274,14 @@ void main()
     // Accumulate Phong lighting from all sources (Multiple Lights)
     // --------------------------------------------------------
     vec3 result = vec3(0.0);
+
+    if (isDigitDisplay) {
+        // Keep LED display readable during movement regardless of scene lighting.
+        result = clamp(baseColor * 1.6, 0.0, 1.0);
+        result = pow(result, vec3(1.0 / 2.2));
+        FragColor = vec4(result, finalAlpha);
+        return;
+    }
     
     // 1. Directional light (parallel rays from the sun through windows)
     if (useDirLight) {
@@ -278,5 +311,5 @@ void main()
     result = pow(result, vec3(1.0/2.2));
     result = min(result, vec3(1.0));
     
-    FragColor = vec4(result, 1.0);
+    FragColor = vec4(result, finalAlpha);
 }

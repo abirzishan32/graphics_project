@@ -29,6 +29,8 @@ unsigned int createCylinderVAO(int segments);
 unsigned int createWedgeVAO();
 void drawCube(Shader& shader, unsigned int VAO, glm::vec3 position, glm::vec3 scale, 
               glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess);
+void drawCubeAlpha(Shader& shader, unsigned int VAO, glm::vec3 position, glm::vec3 scale,
+              glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess, float alpha);
 void drawCubeRotated(Shader& shader, unsigned int VAO, glm::vec3 position, glm::vec3 scale, glm::vec3 rotation,
               glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess);
 void drawCylinder(Shader& shader, unsigned int VAO, int segments, glm::vec3 position, glm::vec3 scale,
@@ -103,6 +105,11 @@ bool threeKeyPressed = false;
 // Viewport toggle
 bool showFourViewports = true;
 bool vKeyPressed = false;
+bool eKeyPressed = false;
+
+unsigned int texElevatorPanelBase = 0;     // wood-like base texture
+unsigned int texElevatorButtons = 0;       // button overlay texture
+unsigned int texSevenSegment[10] = {0};    // 0..9 LED digit textures
 
 struct Elevator {
     enum class State {
@@ -136,6 +143,13 @@ struct Elevator {
         return floorIndex * FLOOR_TO_FLOOR_HEIGHT;
     }
 
+    int floorFromY(float y) const {
+        int floor = static_cast<int>(std::round(y / FLOOR_TO_FLOOR_HEIGHT));
+        if (floor < 0) floor = 0;
+        if (floor > TOP_FLOOR_INDEX) floor = TOP_FLOOR_INDEX;
+        return floor;
+    }
+
     float doorTravel() const {
         return doorOpenAmount * (cabinWidth * 0.26f);
     }
@@ -154,6 +168,19 @@ struct Elevator {
     bool canAcceptFloorInput(const BasicCamera& cam) const {
         return isCameraInsideCabin(cam) &&
                (state == State::IDLE || state == State::DOORS_OPEN || state == State::DOORS_OPENING);
+    }
+
+    bool isCameraInFrontOfDoor(const BasicCamera& cam) const {
+        int landingFloor = floorFromY(cam.Position.y);
+        float doorPlaneZ = shaftCenter.z + shaftDepth * 0.5f + 0.55f;
+        float halfX = shaftWidth * 0.5f + 0.9f;
+        float minY = floorY(landingFloor) - 0.2f;
+        float maxY = floorY(landingFloor) + cabinHeight + 0.3f;
+
+        return std::abs(cam.Position.x - shaftCenter.x) <= halfX &&
+               std::abs(cam.Position.z - doorPlaneZ) <= 1.15f &&
+               cam.Position.y >= minY &&
+               cam.Position.y <= maxY;
     }
 
     void requestFloor(int floorIndex) {
@@ -176,8 +203,36 @@ struct Elevator {
         }
     }
 
+    void requestFromOutside(int floorIndex) {
+        if (floorIndex < 0 || floorIndex > TOP_FLOOR_INDEX) return;
+
+        targetFloor = floorIndex;
+        if (targetFloor == currentFloor) {
+            if (state == State::IDLE || state == State::DOORS_CLOSING) {
+                state = State::DOORS_OPENING;
+            }
+            return;
+        }
+
+        if (state == State::DOORS_OPEN || state == State::DOORS_OPENING) {
+            state = State::DOORS_CLOSING;
+        } else if (state == State::IDLE) {
+            state = State::MOVING;
+        }
+    }
+
     void update(float dt, BasicCamera& cam) {
         float previousCabinY = cabinY;
+
+        // Hall-call convenience: if user stands in front of the door on current landing,
+        // open the door without needing to be inside the cabin.
+        if (isCameraInFrontOfDoor(cam)) {
+            int landingFloor = floorFromY(cam.Position.y);
+            if (landingFloor == currentFloor && (state == State::IDLE || state == State::DOORS_CLOSING)) {
+                targetFloor = currentFloor;
+                state = State::DOORS_OPENING;
+            }
+        }
 
         if (!riderInside) {
             riderInside = isCameraInsideCabin(cam);
@@ -315,6 +370,12 @@ int main()
     // Load image textures using stb_image (GL_REPEAT + trilinear mipmapping)
     unsigned int texBrick     = loadTexture("brick-wall.jpg");
     unsigned int texContainer = loadTexture("container.jpg");
+    texElevatorPanelBase = loadTexture("container.jpg");
+    texElevatorButtons   = loadTexture("elevator-buttons.png");
+    for (int i = 0; i < 10; ++i) {
+        std::string path = "src/seven-segments/" + std::to_string(i) + ".png";
+        texSevenSegment[i] = loadTexture(path.c_str());
+    }
 
     // Render loop
     while (!glfwWindowShouldClose(window)) {
@@ -424,6 +485,18 @@ void processInput(GLFWwindow *window)
         camera.ProcessKeyboard(RIGHT, deltaTime);
 
     bool insideElevatorForInput = elevator.canAcceptFloorInput(camera);
+    bool outsideElevatorForInput = elevator.isCameraInFrontOfDoor(camera);
+
+    // E key: open/call elevator when standing in front of the elevator door.
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
+        if (!eKeyPressed && outsideElevatorForInput) {
+            int landingFloor = elevator.floorFromY(camera.Position.y);
+            elevator.requestFromOutside(landingFloor);
+            eKeyPressed = true;
+        }
+    } else {
+        eKeyPressed = false;
+    }
 
     // Elevator floor buttons: 0=G, 1..5 = upper floors
     for (int floor = 0; floor <= TOP_FLOOR_INDEX; ++floor) {
@@ -432,6 +505,8 @@ void processInput(GLFWwindow *window)
             if (!elevatorFloorKeyPressed[floor]) {
                 if (insideElevatorForInput) {
                     elevator.requestFloor(floor);
+                } else if (outsideElevatorForInput) {
+                    elevator.requestFromOutside(floor);
                 } else {
                     if (floor == 1) {
                         entranceLightsOn = !entranceLightsOn;
@@ -1153,7 +1228,7 @@ void drawElevatorSystem(Shader& shader, unsigned int cubeVAO)
              glm::vec3(wallThickness, elevator.cabinHeight - 0.12f, elevator.cabinDepth - 0.05f),
              mirrorColor, 5, 0.02f, 0.08f, 1.0f, 256.0f);
 
-    // Inner and outer sliding doors (same motion)
+    // Door geometry transform values (used later for transparent glass draw)
     float panelWidth = elevator.cabinWidth * 0.50f;
     float panelHeight = elevator.cabinHeight - 0.15f;
     float travel = elevator.doorTravel();
@@ -1161,57 +1236,98 @@ void drawElevatorSystem(Shader& shader, unsigned int cubeVAO)
     float rightPanelX = elevator.shaftCenter.x + elevator.cabinWidth * 0.25f + travel;
     float innerDoorZ = elevator.shaftCenter.z + elevator.cabinDepth * 0.5f - wallThickness;
     float outerDoorZ = elevator.shaftCenter.z + elevator.shaftDepth * 0.5f + wallThickness * 0.8f;
-    glm::vec3 doorColor(0.58f, 0.60f, 0.64f);
 
-    drawCube(shader, cubeVAO, glm::vec3(leftPanelX, cabinY, innerDoorZ),
-             glm::vec3(panelWidth, panelHeight, wallThickness), doorColor,
-             3, 0.08f, 0.4f, 0.75f, 80.0f);
-    drawCube(shader, cubeVAO, glm::vec3(rightPanelX, cabinY, innerDoorZ),
-             glm::vec3(panelWidth, panelHeight, wallThickness), doorColor,
-             3, 0.08f, 0.4f, 0.75f, 80.0f);
+    // Button panel with texture mapping: wood base + elevator button overlay
+    if (glad_glActiveTexture) {
+        glad_glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texElevatorPanelBase);
+        glad_glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, texElevatorButtons);
+    }
+    shader.setInt("texture1", 0);
+    shader.setInt("texture2", 1);
+    shader.setInt("useTexture", 4);
 
-    drawCube(shader, cubeVAO, glm::vec3(leftPanelX, cabinY, outerDoorZ),
-             glm::vec3(panelWidth, panelHeight, wallThickness), doorColor,
-             3, 0.08f, 0.4f, 0.75f, 80.0f);
-    drawCube(shader, cubeVAO, glm::vec3(rightPanelX, cabinY, outerDoorZ),
-             glm::vec3(panelWidth, panelHeight, wallThickness), doorColor,
-             3, 0.08f, 0.4f, 0.75f, 80.0f);
-
-    // Button panel with 6 keys: G,1,2,3,4,5 (bottom to top)
     glm::vec3 panelPos(elevator.shaftCenter.x + elevator.cabinWidth * 0.5f - 0.09f,
                        cabinY,
                        elevator.shaftCenter.z - 0.25f);
     drawCube(shader, cubeVAO, panelPos,
-             glm::vec3(0.03f, 1.35f, 0.42f),
-             glm::vec3(0.18f, 0.18f, 0.2f), 3, 0.1f, 0.45f, 0.5f, 48.0f);
+             glm::vec3(0.035f, 1.35f, 0.48f),
+             glm::vec3(1.0f, 1.0f, 1.0f), 4, 0.12f, 0.72f, 0.3f, 24.0f);
 
-    for (int floor = 0; floor <= TOP_FLOOR_INDEX; ++floor) {
-        float buttonY = cabinY - 0.52f + floor * 0.21f;
-        bool active = (floor == elevator.targetFloor);
-        glm::vec3 buttonColor = active ? glm::vec3(0.95f, 0.75f, 0.25f) : glm::vec3(0.68f, 0.72f, 0.75f);
-        drawCube(shader, cubeVAO,
-                 glm::vec3(panelPos.x - 0.015f, buttonY, panelPos.z),
-                 glm::vec3(0.02f, 0.10f, 0.10f),
-                 buttonColor, 4,
-                 active ? 0.9f : 0.2f,
-                 0.35f,
-                 0.9f,
-                 96.0f);
+    // LED 7-segment display: texture mapped from src/seven-segments/<digit>.png
+    int displayDigit = elevator.targetFloor;
+    if (displayDigit < 0) displayDigit = 0;
+    if (displayDigit > 9) displayDigit = 9;
 
-        // Small index mark bar (visual key indicator for G/1/2/3/4/5 rows)
-        float markWidth = (floor == 0) ? 0.030f : (0.012f + 0.002f * floor);
-        drawCube(shader, cubeVAO,
-                 glm::vec3(panelPos.x - 0.028f, buttonY, panelPos.z - 0.095f),
-                 glm::vec3(0.008f, 0.02f, markWidth),
-                 glm::vec3(0.95f, 0.95f, 0.95f), 1, 0.5f, 0.7f, 0.4f, 20.0f);
+    if (glad_glActiveTexture) {
+        glad_glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texSevenSegment[displayDigit]);
     }
+    shader.setInt("texture1", 0);
+    shader.setInt("useTexture", 5);
+
+    // Place display inside the elevator above the inner front door so it stays in clear view.
+    glm::vec3 ledPos(elevator.shaftCenter.x,
+                     cabinY + elevator.cabinHeight * 0.33f,
+                     elevator.shaftCenter.z + elevator.cabinDepth * 0.5f - 0.05f);
+    drawCube(shader, cubeVAO, ledPos,
+             glm::vec3(0.95f, 0.34f, 0.015f),
+             glm::vec3(1.0f, 1.0f, 1.0f), 6, 0.8f, 0.2f, 0.1f, 8.0f);
+
+    // Transparent front gate/door (glass-like), drawn last for correct blending.
+    shader.setInt("useTexture", 0);
+    glm::vec3 doorGlassColor(0.75f, 0.86f, 0.95f);
+
+    glDepthMask(GL_FALSE);
+    drawCubeAlpha(shader, cubeVAO, glm::vec3(leftPanelX, cabinY, innerDoorZ),
+             glm::vec3(panelWidth, panelHeight, wallThickness), doorGlassColor,
+             4, 0.05f, 0.15f, 1.0f, 220.0f, 0.30f);
+    drawCubeAlpha(shader, cubeVAO, glm::vec3(rightPanelX, cabinY, innerDoorZ),
+             glm::vec3(panelWidth, panelHeight, wallThickness), doorGlassColor,
+             4, 0.05f, 0.15f, 1.0f, 220.0f, 0.30f);
+
+    drawCubeAlpha(shader, cubeVAO, glm::vec3(leftPanelX, cabinY, outerDoorZ),
+             glm::vec3(panelWidth, panelHeight, wallThickness), doorGlassColor,
+             4, 0.05f, 0.15f, 1.0f, 220.0f, 0.30f);
+    drawCubeAlpha(shader, cubeVAO, glm::vec3(rightPanelX, cabinY, outerDoorZ),
+             glm::vec3(panelWidth, panelHeight, wallThickness), doorGlassColor,
+             4, 0.05f, 0.15f, 1.0f, 220.0f, 0.30f);
+    glDepthMask(GL_TRUE);
+
+    shader.setFloat("objectAlpha", 1.0f);
+    shader.setInt("useTexture", 0);
+    if (glad_glActiveTexture) {
+        glad_glActiveTexture(GL_TEXTURE0);
+    }
+}
+
+void drawCubeAlpha(Shader& shader, unsigned int VAO, glm::vec3 position, glm::vec3 scale,
+              glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess, float alpha)
+{
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, position);
+    model = glm::scale(model, scale);
+    shader.setMat4("model", model);
+    shader.setVec3("objectColor", color);
+    shader.setInt("textureType", texType);
+    shader.setFloat("ambientStrength", ambient);
+    shader.setFloat("diffuseStrength", diffuse);
+    shader.setFloat("specularStrength", specular);
+    shader.setFloat("shininess", shininess);
+    shader.setFloat("objectAlpha", alpha);
+
+    glBindVertexArray(VAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    shader.setFloat("objectAlpha", 1.0f);
 }
 
 void setupLighting(Shader& shader)
 {
+    shader.setFloat("objectAlpha", 1.0f);
     // Pass general light status to shader for ambient/emissive components
     shader.setBool("lightsOn", ceilingLightsOn || entranceLightsOn);
-    
+
     // Window positions for volumetric scattering (4 windows)
     shader.setInt("numWindows", 4);
     float windowSpacing = 8.0f;
@@ -1329,6 +1445,7 @@ void drawCube(Shader& shader, unsigned int VAO, glm::vec3 position, glm::vec3 sc
     shader.setFloat("diffuseStrength", diffuse);
     shader.setFloat("specularStrength", specular);
     shader.setFloat("shininess", shininess);
+    shader.setFloat("objectAlpha", 1.0f);
     
     glBindVertexArray(VAO);
     glDrawArrays(GL_TRIANGLES, 0, 36);
@@ -1350,6 +1467,7 @@ void drawCubeRotated(Shader& shader, unsigned int VAO, glm::vec3 position, glm::
     shader.setFloat("diffuseStrength", diffuse);
     shader.setFloat("specularStrength", specular);
     shader.setFloat("shininess", shininess);
+    shader.setFloat("objectAlpha", 1.0f);
     
     glBindVertexArray(VAO);
     glDrawArrays(GL_TRIANGLES, 0, 36);
@@ -1369,6 +1487,7 @@ void drawCylinder(Shader& shader, unsigned int VAO, int segments, glm::vec3 posi
     shader.setFloat("diffuseStrength", diffuse);
     shader.setFloat("specularStrength", specular);
     shader.setFloat("shininess", shininess);
+    shader.setFloat("objectAlpha", 1.0f);
     
     glBindVertexArray(VAO);
     glDrawArrays(GL_TRIANGLES, 0, segments * 12);
@@ -1384,6 +1503,7 @@ void drawQuad(Shader& shader, unsigned int VAO, glm::mat4 model,
     shader.setFloat("diffuseStrength", diffuse);
     shader.setFloat("specularStrength", specular);
     shader.setFloat("shininess", shininess);
+    shader.setFloat("objectAlpha", 1.0f);
     
     glBindVertexArray(VAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
