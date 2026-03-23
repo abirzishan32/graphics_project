@@ -69,8 +69,8 @@ unsigned int SCR_WIDTH = 1400;
 unsigned int SCR_HEIGHT = 900;
 
 // Parking lot dimensions (meters)
-const float LOT_WIDTH = 80.0f;
-const float LOT_DEPTH = 60.0f;
+const float LOT_WIDTH = 140.0f;
+const float LOT_DEPTH = 100.0f;
 const float CEILING_HEIGHT = 3.5f;
 const float WALL_THICKNESS = 0.3f;
 const float PILLAR_SIZE = 0.5f;
