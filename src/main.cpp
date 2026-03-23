@@ -843,8 +843,8 @@ unsigned int createCurvedBarrierVAO(int& outVertexCount) {
 //  - Below ceiling point lights (gets white diffuse + specular from above)
 //  - Near entrance bar lights (gets warm golden specular from the side)
 void drawCurvedBarrier(Shader& shader, unsigned int VAO, int vertexCount) {
-    // Allow curved surface texture to change
-    shader.setInt("useTexture", useTexture);
+    // Keep curved arc procedural-only so image textures (panel/display) never map onto it.
+    shader.setInt("useTexture", 0);
     // --- Barrier 1: Driver-side center divider, near entrance ---
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, glm::vec3(LOT_WIDTH/2.0f - 7.0f, 0.0f, LOT_DEPTH * 0.25f));
@@ -1298,6 +1298,10 @@ void drawElevatorSystem(Shader& shader, unsigned int cubeVAO)
     shader.setFloat("objectAlpha", 1.0f);
     shader.setInt("useTexture", 0);
     if (glad_glActiveTexture) {
+        glad_glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glad_glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, 0);
         glad_glActiveTexture(GL_TEXTURE0);
     }
 }
