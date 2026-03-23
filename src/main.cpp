@@ -117,6 +117,7 @@ unsigned int texElevatorPanelBase = 0;     // wood-like base texture
 unsigned int texElevatorButtons = 0;       // button overlay texture
 unsigned int texSevenSegment[10] = {0};    // 0..9 LED digit textures
 unsigned int escalatorBillboardVAO = 0;
+unsigned int texAarongBillboard = 0;
 
 struct Elevator {
     enum class State {
@@ -380,6 +381,7 @@ int main()
     unsigned int texContainer = loadTexture("container.jpg");
     texElevatorPanelBase = loadTexture("container.jpg");
     texElevatorButtons   = loadTexture("elevator-buttons.png");
+    texAarongBillboard   = loadTexture("src/advertisements/aarong.jpeg");
     for (int i = 0; i < 10; ++i) {
         std::string path = "src/seven-segments/" + std::to_string(i) + ".png";
         texSevenSegment[i] = loadTexture(path.c_str());
@@ -2507,6 +2509,7 @@ void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsig
 
     // Draw right-side outdoor escalator access section
     EscalatorSystem::draw(shader, cubeVAO, quadVAO, escalatorBillboardVAO,
+                          texAarongBillboard,
                           FLOOR_TO_FLOOR_HEIGHT, LOT_WIDTH, LOT_DEPTH, WALL_THICKNESS);
     // Note: drawCurvedBarrier is called separately from main() because it needs curvedBarrierVAO
 }

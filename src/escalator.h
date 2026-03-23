@@ -141,6 +141,7 @@ inline void updateRide(BasicCamera& camera, float deltaTime,
 }
 
 inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int billboardVAO,
+                 unsigned int texBillboardAd,
                  float floorToFloorHeight, float lotWidth, float lotDepth, float wallThickness) {
     Layout l = computeLayout(floorToFloorHeight, lotWidth, lotDepth, wallThickness);
 
@@ -265,6 +266,9 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
     for (int side = 0; side < 2; ++side) {
         for (int i = 0; i < 3; ++i) {
             float x = l.pathStartX - 2.6f - i * 3.2f;
+            float postHalfDepth = 0.06f; // half of support depth (0.12)
+            float backOffsetSign = (side == 0) ? -1.0f : 1.0f;
+            float postZ = posterZs[side] + backOffsetSign * postHalfDepth;
 
             glm::mat4 panelModel = glm::mat4(1.0f);
             panelModel = glm::translate(panelModel, glm::vec3(x, 0.25f, posterZs[side]));
@@ -273,16 +277,34 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
                                      glm::vec3(0.0f, 1.0f, 0.0f));
             panelModel = glm::scale(panelModel, glm::vec3(2.0f, 2.8f, 1.0f));
             shader.setMat4("model", panelModel);
+
+            // Apply real advertisement texture to one billboard (aarong.jpeg)
+            if (side == 0 && i == 0 && texBillboardAd != 0) {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, texBillboardAd);
+                shader.setInt("texture1", 0);
+                shader.setInt("useTexture", 1);
+                shader.setInt("textureType", 0);
+                shader.setVec3("objectColor", glm::vec3(1.0f));
+            } else {
+                shader.setInt("useTexture", 0);
+                shader.setInt("textureType", 3);
+                shader.setVec3("objectColor", glm::vec3(0.92f, 0.92f, 0.94f));
+            }
+
             glBindVertexArray(billboardVAO);
             glDrawArrays(GL_TRIANGLES, 0, 6);
 
             drawCube(shader, cubeVAO,
-                     glm::vec3(x, 1.1f, posterZs[side]),
+                     glm::vec3(x, 1.1f, postZ),
                      glm::vec3(0.12f, 2.2f, 0.12f),
                      glm::vec3(0.42f, 0.42f, 0.45f), 3, 0.1f, 0.5f, 0.35f, 32.0f);
         }
     }
 
+    shader.setInt("useTexture", 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glBindVertexArray(0);
 }
 
