@@ -37,6 +37,9 @@ void drawCylinder(Shader& shader, unsigned int VAO, int segments, glm::vec3 posi
               glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess);
 void drawQuad(Shader& shader, unsigned int VAO, glm::mat4 model, 
               glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess);
+void drawSlabWithOpening(Shader& shader, unsigned int quadVAO, float yLevel,
+              glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess,
+              float openingCenterX, float openingCenterZ, float openingWidth, float openingDepth, bool flipNormal);
 void setupLighting(Shader& shader);
 void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO);
 void drawRealisticCar(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, unsigned int wedgeVAO, glm::vec3 position, glm::vec3 carColor, float rotation);
@@ -1158,10 +1161,12 @@ void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int q
     for (int floor = 1; floor <= EXTRA_FLOORS; ++floor) {
         float yBase = floor * FLOOR_TO_FLOOR_HEIGHT;
 
-        glm::mat4 floorModel = glm::mat4(1.0f);
-        floorModel = glm::translate(floorModel, glm::vec3(LOT_WIDTH / 2.0f, yBase, LOT_DEPTH / 2.0f));
-        floorModel = glm::scale(floorModel, glm::vec3(LOT_WIDTH, 1.0f, LOT_DEPTH));
-        drawQuad(shader, quadVAO, floorModel, concreteColor, 0, 0.12f, 0.65f, 0.2f, 20.0f);
+        float shaftOpeningW = elevator.shaftWidth + 0.35f;
+        float shaftOpeningD = elevator.shaftDepth + 0.35f;
+        drawSlabWithOpening(shader, quadVAO, yBase,
+                            concreteColor, 0, 0.12f, 0.65f, 0.2f, 20.0f,
+                            elevator.shaftCenter.x, elevator.shaftCenter.z,
+                            shaftOpeningW, shaftOpeningD, false);
 
         float wallY = yBase + CEILING_HEIGHT * 0.5f;
         drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH / 2.0f, wallY, -WALL_THICKNESS / 2.0f),
@@ -1513,6 +1518,35 @@ void drawQuad(Shader& shader, unsigned int VAO, glm::mat4 model,
     glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
+void drawSlabWithOpening(Shader& shader, unsigned int quadVAO, float yLevel,
+              glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess,
+              float openingCenterX, float openingCenterZ, float openingWidth, float openingDepth, bool flipNormal)
+{
+    float leftW  = openingCenterX - openingWidth * 0.5f;
+    float rightX = openingCenterX + openingWidth * 0.5f;
+    float rightW = LOT_WIDTH - rightX;
+
+    float backD  = openingCenterZ - openingDepth * 0.5f;
+    float frontZ = openingCenterZ + openingDepth * 0.5f;
+    float frontD = LOT_DEPTH - frontZ;
+
+    auto drawSection = [&](float cx, float cz, float sx, float sz) {
+        if (sx <= 0.0f || sz <= 0.0f) return;
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(cx, yLevel, cz));
+        if (flipNormal) {
+            model = glm::rotate(model, glm::radians(180.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        }
+        model = glm::scale(model, glm::vec3(sx, 1.0f, sz));
+        drawQuad(shader, quadVAO, model, color, texType, ambient, diffuse, specular, shininess);
+    };
+
+    drawSection(leftW * 0.5f, LOT_DEPTH * 0.5f, leftW, LOT_DEPTH);
+    drawSection(rightX + rightW * 0.5f, LOT_DEPTH * 0.5f, rightW, LOT_DEPTH);
+    drawSection(openingCenterX, backD * 0.5f, openingWidth, backD);
+    drawSection(openingCenterX, frontZ + frontD * 0.5f, openingWidth, frontD);
+}
+
 void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO)
 {
     glm::vec3 concreteColor(0.45f, 0.43f, 0.40f);
@@ -1529,11 +1563,12 @@ void drawParkingLot(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, 
     
     // === CEILING ===
     shader.setInt("useTexture", 0); // Ceiling remains starting state
-    glm::mat4 ceilingModel = glm::mat4(1.0f);
-    ceilingModel = glm::translate(ceilingModel, glm::vec3(LOT_WIDTH/2, CEILING_HEIGHT, LOT_DEPTH/2));
-    ceilingModel = glm::rotate(ceilingModel, glm::radians(180.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-    ceilingModel = glm::scale(ceilingModel, glm::vec3(LOT_WIDTH, 1.0f, LOT_DEPTH));
-    drawQuad(shader, quadVAO, ceilingModel, ceilingColor, 0, 0.1f, 0.5f, 0.1f, 8.0f);
+    float shaftOpeningW = elevator.shaftWidth + 0.35f;
+    float shaftOpeningD = elevator.shaftDepth + 0.35f;
+    drawSlabWithOpening(shader, quadVAO, CEILING_HEIGHT,
+                        ceilingColor, 0, 0.1f, 0.5f, 0.1f, 8.0f,
+                        elevator.shaftCenter.x, elevator.shaftCenter.z,
+                        shaftOpeningW, shaftOpeningD, true);
     
     // === WALLS ===
     shader.setInt("useTexture", useTexture); // Allow walls texture to change
