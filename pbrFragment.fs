@@ -64,7 +64,7 @@ uniform sampler2D texture2;    // container
 uniform int useTexture;
 
 // Procedural texture type (used when useTexture == 0)
-// 0=concrete, 1=painted line, 2=car paint, 3=metal
+// 0=concrete, 1=painted line, 2=car paint, 3=metal, 5=mirror
 uniform int textureType;
 
 
@@ -197,6 +197,17 @@ vec3 proceduralMetal(vec2 uv, vec3 baseColor) {
     return baseColor + vec3(brush * 0.1 - 0.05);
 }
 
+vec3 proceduralMirror(vec3 baseColor, vec3 viewDir, vec3 normal) {
+    vec3 refl = reflect(-viewDir, normal);
+    float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 5.0);
+    float skyFactor = clamp(refl.y * 0.5 + 0.5, 0.0, 1.0);
+    vec3 envLow = vec3(0.14, 0.16, 0.19);
+    vec3 envHigh = vec3(0.72, 0.80, 0.92);
+    vec3 envColor = mix(envLow, envHigh, skyFactor);
+    float metallicTint = 0.25;
+    return mix(baseColor, envColor, 0.75 + 0.2 * fresnel) + metallicTint * fresnel;
+}
+
 // ============================================================
 // Main
 // ============================================================
@@ -231,6 +242,7 @@ void main()
         else if (textureType == 1) baseColor = proceduralPaintedLine(procUV, objectColor);
         else if (textureType == 2) baseColor = proceduralCarPaint(procUV, objectColor, viewDir, norm);
         else if (textureType == 3) baseColor = proceduralMetal(procUV, objectColor);
+        else if (textureType == 5) baseColor = proceduralMirror(objectColor, viewDir, norm);
     }
     
     // --------------------------------------------------------

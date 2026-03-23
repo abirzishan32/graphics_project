@@ -50,6 +50,8 @@ void drawDirectionalArrow(Shader& shader, unsigned int cubeVAO, glm::vec3 positi
 void drawSpeedBump(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float width);
 void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO);
 void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO);
+void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO);
+void drawElevatorSystem(Shader& shader, unsigned int cubeVAO);
 unsigned int createCurvedBarrierVAO(int& outVertexCount);
 void drawCurvedBarrier(Shader& shader, unsigned int VAO, int vertexCount);
 unsigned int createSphereVAO(int& outVertexCount);
@@ -73,6 +75,9 @@ const float PILLAR_SIZE = 0.5f;
 const float SPOT_WIDTH = 2.5f;
 const float SPOT_DEPTH = 5.0f;
 const float LANE_WIDTH = 6.0f;
+const int EXTRA_FLOORS = 5;
+const int TOP_FLOOR_INDEX = 5;
+const float FLOOR_TO_FLOOR_HEIGHT = 4.0f;
 
 // Camera - starts inside the parking lot at pedestrian height
 BasicCamera camera(5.0f, 1.7f, LOT_DEPTH/2.0f);
@@ -98,6 +103,154 @@ bool threeKeyPressed = false;
 // Viewport toggle
 bool showFourViewports = true;
 bool vKeyPressed = false;
+
+struct Elevator {
+    enum class State {
+        IDLE,
+        DOORS_OPENING,
+        DOORS_OPEN,
+        DOORS_CLOSING,
+        MOVING
+    };
+
+    State state = State::DOORS_OPEN;
+    glm::vec3 shaftCenter = glm::vec3(LOT_WIDTH - 4.0f, 0.0f, 4.0f);
+    float shaftWidth = 3.2f;
+    float shaftDepth = 3.2f;
+    float cabinWidth = 2.2f;
+    float cabinDepth = 2.0f;
+    float cabinHeight = 2.6f;
+
+    float doorOpenAmount = 1.0f;
+    float doorSpeed = 1.4f;
+    float moveSpeed = 2.8f;
+    float doorsOpenHoldTime = 1.4f;
+    float holdTimer = 0.0f;
+
+    int currentFloor = 0;
+    int targetFloor = 0;
+    bool riderInside = false;
+    float cabinY = cabinHeight * 0.5f;
+
+    float floorY(int floorIndex) const {
+        return floorIndex * FLOOR_TO_FLOOR_HEIGHT;
+    }
+
+    float doorTravel() const {
+        return doorOpenAmount * (cabinWidth * 0.26f);
+    }
+
+    bool isCameraInsideCabin(const BasicCamera& cam) const {
+        float minY = cabinY - cabinHeight * 0.5f + 0.05f;
+        float maxY = cabinY + cabinHeight * 0.5f - 0.05f;
+        float halfX = cabinWidth * 0.38f;
+        float halfZ = cabinDepth * 0.38f;
+        return std::abs(cam.Position.x - shaftCenter.x) <= halfX &&
+               std::abs(cam.Position.z - shaftCenter.z) <= halfZ &&
+               cam.Position.y >= minY &&
+               cam.Position.y <= maxY;
+    }
+
+    bool canAcceptFloorInput(const BasicCamera& cam) const {
+        return isCameraInsideCabin(cam) &&
+               (state == State::IDLE || state == State::DOORS_OPEN || state == State::DOORS_OPENING);
+    }
+
+    void requestFloor(int floorIndex) {
+        if (floorIndex < 0 || floorIndex > TOP_FLOOR_INDEX) return;
+        targetFloor = floorIndex;
+
+        if (targetFloor == currentFloor) {
+            if (state == State::IDLE || state == State::DOORS_CLOSING) {
+                state = State::DOORS_OPENING;
+            }
+            return;
+        }
+
+        if (state == State::DOORS_OPEN || state == State::DOORS_OPENING) {
+            state = State::DOORS_CLOSING;
+            return;
+        }
+        if (state == State::IDLE) {
+            state = State::MOVING;
+        }
+    }
+
+    void update(float dt, BasicCamera& cam) {
+        float previousCabinY = cabinY;
+
+        if (!riderInside) {
+            riderInside = isCameraInsideCabin(cam);
+        }
+
+        switch (state) {
+            case State::IDLE:
+                if (targetFloor != currentFloor) {
+                    state = State::MOVING;
+                }
+                break;
+
+            case State::DOORS_OPENING:
+                doorOpenAmount += doorSpeed * dt;
+                if (doorOpenAmount >= 1.0f) {
+                    doorOpenAmount = 1.0f;
+                    holdTimer = 0.0f;
+                    state = State::DOORS_OPEN;
+                }
+                break;
+
+            case State::DOORS_OPEN:
+                holdTimer += dt;
+                if (targetFloor != currentFloor) {
+                    state = State::DOORS_CLOSING;
+                } else if (holdTimer >= doorsOpenHoldTime) {
+                    state = State::DOORS_CLOSING;
+                }
+                break;
+
+            case State::DOORS_CLOSING:
+                doorOpenAmount -= doorSpeed * dt;
+                if (doorOpenAmount <= 0.0f) {
+                    doorOpenAmount = 0.0f;
+                    if (targetFloor != currentFloor) {
+                        state = State::MOVING;
+                    } else {
+                        state = State::IDLE;
+                    }
+                }
+                break;
+
+            case State::MOVING: {
+                float targetY = floorY(targetFloor) + cabinHeight * 0.5f;
+                float direction = (targetY > cabinY) ? 1.0f : -1.0f;
+                float step = moveSpeed * dt;
+
+                if (std::abs(targetY - cabinY) <= step) {
+                    cabinY = targetY;
+                    currentFloor = targetFloor;
+                    holdTimer = 0.0f;
+                    state = State::DOORS_OPENING;
+                } else {
+                    cabinY += direction * step;
+                }
+                break;
+            }
+        }
+
+        float deltaY = cabinY - previousCabinY;
+        if (riderInside && std::abs(deltaY) > 0.0f) {
+            cam.Position.y += deltaY;
+            cam.EyeHeight += deltaY;
+        }
+
+        if (state == State::DOORS_OPENING || state == State::DOORS_OPEN) {
+            riderInside = isCameraInsideCabin(cam);
+        }
+    }
+};
+
+Elevator elevator;
+bool elevatorFloorKeyPressed[6] = {false, false, false, false, false, false};
 
 // Manually define missing GLAD function pointers to fix linker errors
 PFNGLACTIVETEXTUREPROC glad_glActiveTexture = nullptr;
@@ -170,6 +323,7 @@ int main()
         lastFrame = currentFrame;
 
         processInput(window);
+        elevator.update(deltaTime, camera);
 
         // Get actual framebuffer size for High-DPI displays (Mac)
         int display_w, display_h;
@@ -268,25 +422,30 @@ void processInput(GLFWwindow *window)
         camera.ProcessKeyboard(LEFT, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         camera.ProcessKeyboard(RIGHT, deltaTime);
-    
-    // 1 key to toggle entrance lights
-    if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) {
-        if (!oneKeyPressed) {
-            entranceLightsOn = !entranceLightsOn;
-            oneKeyPressed = true;
-        }
-    } else {
-        oneKeyPressed = false;
-    }
 
-    // 2 key to toggle ceiling lights
-    if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS) {
-        if (!twoKeyPressed) {
-            ceilingLightsOn = !ceilingLightsOn;
-            twoKeyPressed = true;
+    bool insideElevatorForInput = elevator.canAcceptFloorInput(camera);
+
+    // Elevator floor buttons: 0=G, 1..5 = upper floors
+    for (int floor = 0; floor <= TOP_FLOOR_INDEX; ++floor) {
+        int key = (floor == 0) ? GLFW_KEY_0 : (GLFW_KEY_1 + floor - 1);
+        if (glfwGetKey(window, key) == GLFW_PRESS) {
+            if (!elevatorFloorKeyPressed[floor]) {
+                if (insideElevatorForInput) {
+                    elevator.requestFloor(floor);
+                } else {
+                    if (floor == 1) {
+                        entranceLightsOn = !entranceLightsOn;
+                    } else if (floor == 2) {
+                        ceilingLightsOn = !ceilingLightsOn;
+                    } else if (floor == 3) {
+                        useTexture = (useTexture + 1) % 3;
+                    }
+                }
+                elevatorFloorKeyPressed[floor] = true;
+            }
+        } else {
+            elevatorFloorKeyPressed[floor] = false;
         }
-    } else {
-        twoKeyPressed = false;
     }
 
     // L key for master toggle (optional convenience)
@@ -299,17 +458,6 @@ void processInput(GLFWwindow *window)
         }
     } else {
         lKeyPressed = false;
-    }
-
-    // Key 3: Cycle texture mode
-    // 0 = procedural, 1 = simple texture, 2 = vertex-blended, 3 = fragment-blended
-    if (glfwGetKey(window, GLFW_KEY_3) == GLFW_PRESS) {
-        if (!threeKeyPressed) {
-            useTexture = (useTexture + 1) % 3;
-            threeKeyPressed = true;
-        }
-    } else {
-        threeKeyPressed = false;
     }
 
     // Key V: Toggle between 4 viewports and single viewport
@@ -922,6 +1070,140 @@ void drawTexturedObjects(Shader& shader, unsigned int cubeVAO,
         glBindVertexArray(coneVAO);
         glDrawElements(GL_TRIANGLES, coneCount, GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
+    }
+}
+
+void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO)
+{
+    glm::vec3 concreteColor(0.42f, 0.41f, 0.39f);
+    glm::vec3 wallColor(0.38f, 0.37f, 0.36f);
+
+    shader.setInt("useTexture", 0);
+
+    for (int floor = 1; floor <= EXTRA_FLOORS; ++floor) {
+        float yBase = floor * FLOOR_TO_FLOOR_HEIGHT;
+
+        glm::mat4 floorModel = glm::mat4(1.0f);
+        floorModel = glm::translate(floorModel, glm::vec3(LOT_WIDTH / 2.0f, yBase, LOT_DEPTH / 2.0f));
+        floorModel = glm::scale(floorModel, glm::vec3(LOT_WIDTH, 1.0f, LOT_DEPTH));
+        drawQuad(shader, quadVAO, floorModel, concreteColor, 0, 0.12f, 0.65f, 0.2f, 20.0f);
+
+        float wallY = yBase + CEILING_HEIGHT * 0.5f;
+        drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH / 2.0f, wallY, -WALL_THICKNESS / 2.0f),
+                 glm::vec3(LOT_WIDTH, CEILING_HEIGHT, WALL_THICKNESS), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+        drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH / 2.0f, wallY, LOT_DEPTH + WALL_THICKNESS / 2.0f),
+                 glm::vec3(LOT_WIDTH, CEILING_HEIGHT, WALL_THICKNESS), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+        drawCube(shader, cubeVAO, glm::vec3(-WALL_THICKNESS / 2.0f, wallY, LOT_DEPTH / 2.0f),
+                 glm::vec3(WALL_THICKNESS, CEILING_HEIGHT, LOT_DEPTH), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+        drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH + WALL_THICKNESS / 2.0f, wallY, LOT_DEPTH / 2.0f),
+                 glm::vec3(WALL_THICKNESS, CEILING_HEIGHT, LOT_DEPTH), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+    }
+}
+
+void drawElevatorSystem(Shader& shader, unsigned int cubeVAO)
+{
+    shader.setInt("useTexture", 0);
+
+    float shaftHeight = EXTRA_FLOORS * FLOOR_TO_FLOOR_HEIGHT + CEILING_HEIGHT;
+    float shaftWallY = shaftHeight * 0.5f;
+    float shaftWallThickness = 0.12f;
+    glm::vec3 shaftColor(0.30f, 0.31f, 0.33f);
+
+    // Shaft outer shell (open at front)
+    drawCube(shader, cubeVAO,
+             glm::vec3(elevator.shaftCenter.x, shaftWallY, elevator.shaftCenter.z - elevator.shaftDepth * 0.5f),
+             glm::vec3(elevator.shaftWidth, shaftHeight, shaftWallThickness), shaftColor,
+             3, 0.08f, 0.45f, 0.35f, 36.0f);
+    drawCube(shader, cubeVAO,
+             glm::vec3(elevator.shaftCenter.x - elevator.shaftWidth * 0.5f, shaftWallY, elevator.shaftCenter.z),
+             glm::vec3(shaftWallThickness, shaftHeight, elevator.shaftDepth), shaftColor,
+             3, 0.08f, 0.45f, 0.35f, 36.0f);
+    drawCube(shader, cubeVAO,
+             glm::vec3(elevator.shaftCenter.x + elevator.shaftWidth * 0.5f, shaftWallY, elevator.shaftCenter.z),
+             glm::vec3(shaftWallThickness, shaftHeight, elevator.shaftDepth), shaftColor,
+             3, 0.08f, 0.45f, 0.35f, 36.0f);
+
+    // Cabin shell
+    float cabinY = elevator.cabinY;
+    float wallThickness = 0.06f;
+    glm::vec3 cabinFrameColor(0.22f, 0.23f, 0.25f);
+    glm::vec3 mirrorColor(0.78f, 0.80f, 0.85f);
+
+    // Cabin floor/roof
+    drawCube(shader, cubeVAO,
+             glm::vec3(elevator.shaftCenter.x, cabinY - elevator.cabinHeight * 0.5f + 0.03f, elevator.shaftCenter.z),
+             glm::vec3(elevator.cabinWidth, 0.06f, elevator.cabinDepth),
+             glm::vec3(0.35f, 0.35f, 0.37f), 3, 0.1f, 0.5f, 0.3f, 20.0f);
+    drawCube(shader, cubeVAO,
+             glm::vec3(elevator.shaftCenter.x, cabinY + elevator.cabinHeight * 0.5f - 0.03f, elevator.shaftCenter.z),
+             glm::vec3(elevator.cabinWidth, 0.06f, elevator.cabinDepth),
+             cabinFrameColor, 3, 0.08f, 0.45f, 0.4f, 32.0f);
+
+    // Mirror-finish interior surfaces (high specular + high shininess)
+    drawCube(shader, cubeVAO,
+             glm::vec3(elevator.shaftCenter.x, cabinY, elevator.shaftCenter.z - elevator.cabinDepth * 0.5f + wallThickness * 0.5f),
+             glm::vec3(elevator.cabinWidth - 0.05f, elevator.cabinHeight - 0.12f, wallThickness),
+             mirrorColor, 5, 0.02f, 0.08f, 1.0f, 256.0f);
+    drawCube(shader, cubeVAO,
+             glm::vec3(elevator.shaftCenter.x - elevator.cabinWidth * 0.5f + wallThickness * 0.5f, cabinY, elevator.shaftCenter.z),
+             glm::vec3(wallThickness, elevator.cabinHeight - 0.12f, elevator.cabinDepth - 0.05f),
+             mirrorColor, 5, 0.02f, 0.08f, 1.0f, 256.0f);
+    drawCube(shader, cubeVAO,
+             glm::vec3(elevator.shaftCenter.x + elevator.cabinWidth * 0.5f - wallThickness * 0.5f, cabinY, elevator.shaftCenter.z),
+             glm::vec3(wallThickness, elevator.cabinHeight - 0.12f, elevator.cabinDepth - 0.05f),
+             mirrorColor, 5, 0.02f, 0.08f, 1.0f, 256.0f);
+
+    // Inner and outer sliding doors (same motion)
+    float panelWidth = elevator.cabinWidth * 0.50f;
+    float panelHeight = elevator.cabinHeight - 0.15f;
+    float travel = elevator.doorTravel();
+    float leftPanelX = elevator.shaftCenter.x - elevator.cabinWidth * 0.25f - travel;
+    float rightPanelX = elevator.shaftCenter.x + elevator.cabinWidth * 0.25f + travel;
+    float innerDoorZ = elevator.shaftCenter.z + elevator.cabinDepth * 0.5f - wallThickness;
+    float outerDoorZ = elevator.shaftCenter.z + elevator.shaftDepth * 0.5f + wallThickness * 0.8f;
+    glm::vec3 doorColor(0.58f, 0.60f, 0.64f);
+
+    drawCube(shader, cubeVAO, glm::vec3(leftPanelX, cabinY, innerDoorZ),
+             glm::vec3(panelWidth, panelHeight, wallThickness), doorColor,
+             3, 0.08f, 0.4f, 0.75f, 80.0f);
+    drawCube(shader, cubeVAO, glm::vec3(rightPanelX, cabinY, innerDoorZ),
+             glm::vec3(panelWidth, panelHeight, wallThickness), doorColor,
+             3, 0.08f, 0.4f, 0.75f, 80.0f);
+
+    drawCube(shader, cubeVAO, glm::vec3(leftPanelX, cabinY, outerDoorZ),
+             glm::vec3(panelWidth, panelHeight, wallThickness), doorColor,
+             3, 0.08f, 0.4f, 0.75f, 80.0f);
+    drawCube(shader, cubeVAO, glm::vec3(rightPanelX, cabinY, outerDoorZ),
+             glm::vec3(panelWidth, panelHeight, wallThickness), doorColor,
+             3, 0.08f, 0.4f, 0.75f, 80.0f);
+
+    // Button panel with 6 keys: G,1,2,3,4,5 (bottom to top)
+    glm::vec3 panelPos(elevator.shaftCenter.x + elevator.cabinWidth * 0.5f - 0.09f,
+                       cabinY,
+                       elevator.shaftCenter.z - 0.25f);
+    drawCube(shader, cubeVAO, panelPos,
+             glm::vec3(0.03f, 1.35f, 0.42f),
+             glm::vec3(0.18f, 0.18f, 0.2f), 3, 0.1f, 0.45f, 0.5f, 48.0f);
+
+    for (int floor = 0; floor <= TOP_FLOOR_INDEX; ++floor) {
+        float buttonY = cabinY - 0.52f + floor * 0.21f;
+        bool active = (floor == elevator.targetFloor);
+        glm::vec3 buttonColor = active ? glm::vec3(0.95f, 0.75f, 0.25f) : glm::vec3(0.68f, 0.72f, 0.75f);
+        drawCube(shader, cubeVAO,
+                 glm::vec3(panelPos.x - 0.015f, buttonY, panelPos.z),
+                 glm::vec3(0.02f, 0.10f, 0.10f),
+                 buttonColor, 4,
+                 active ? 0.9f : 0.2f,
+                 0.35f,
+                 0.9f,
+                 96.0f);
+
+        // Small index mark bar (visual key indicator for G/1/2/3/4/5 rows)
+        float markWidth = (floor == 0) ? 0.030f : (0.012f + 0.002f * floor);
+        drawCube(shader, cubeVAO,
+                 glm::vec3(panelPos.x - 0.028f, buttonY, panelPos.z - 0.095f),
+                 glm::vec3(0.008f, 0.02f, markWidth),
+                 glm::vec3(0.95f, 0.95f, 0.95f), 1, 0.5f, 0.7f, 0.4f, 20.0f);
     }
 }
 
@@ -1950,8 +2232,14 @@ void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsig
     // Draw outdoor environment first
     drawOutdoorEnvironment(shader, cubeVAO, quadVAO, cylVAO);
 
+    // Draw additional empty floors stacked above ground floor
+    drawStackedEmptyFloors(shader, cubeVAO, quadVAO);
+
     // Draw the parking lot
     drawParkingLot(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+
+    // Draw interactive elevator system at corner
+    drawElevatorSystem(shader, cubeVAO);
     
     // Draw parking lot signage and safety features
     drawParkingSignage(shader, cubeVAO, cylVAO);
