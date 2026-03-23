@@ -44,7 +44,7 @@ struct PointLight {
 uniform PointLight pointLights[MAX_POINT_LIGHTS];
 uniform int numPointLights;
 
-// Volumetric Light Scattering (God Rays) - window positions
+// Volumetric Light Scattering - window positions
 #define MAX_WINDOWS 8
 uniform vec3 windowPositions[MAX_WINDOWS];
 uniform int numWindows;
@@ -210,7 +210,7 @@ void main()
     // Determine base color according to texture mode
     // --------------------------------------------------------
     vec3 baseColor;
-    
+
     if (useTexture == 1) {
         // State 1: brick-wall
         vec3 imgColor = texture(texture1, uv).rgb;

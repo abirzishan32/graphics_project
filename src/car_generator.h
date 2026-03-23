@@ -802,7 +802,7 @@ public:
     // RENDERING
     // ============================================================
     
-    void render(Shader& shader, glm::vec3 position, float rotation, glm::vec3 bodyColor) {
+    void render(Shader& shader, glm::vec3 position, float rotation, glm::vec3 bodyColor, float wheelAngle = 0.0f) {
         glm::mat4 baseModel = glm::mat4(1.0f);
         baseModel = glm::translate(baseModel, position);
         baseModel = glm::rotate(baseModel, glm::radians(rotation), glm::vec3(0, 1, 0));
@@ -854,17 +854,18 @@ public:
         glBindVertexArray(mirrorVAO);
         glDrawArrays(GL_TRIANGLES, 0, mirrorVertexCount);
         
-        // Wheels (4 wheels)
-        renderWheel(shader, baseModel, glm::vec3(0.9f, wheelRadius, -width/2 - 0.02f));
-        renderWheel(shader, baseModel, glm::vec3(0.9f, wheelRadius, width/2 + 0.02f));
-        renderWheel(shader, baseModel, glm::vec3(3.3f, wheelRadius, -width/2 - 0.02f));
-        renderWheel(shader, baseModel, glm::vec3(3.3f, wheelRadius, width/2 + 0.02f));
+        // Wheels (4 wheels) with spin animation
+        renderWheel(shader, baseModel, glm::vec3(0.9f, wheelRadius, -width/2 - 0.02f), wheelAngle);
+        renderWheel(shader, baseModel, glm::vec3(0.9f, wheelRadius, width/2 + 0.02f), wheelAngle);
+        renderWheel(shader, baseModel, glm::vec3(3.3f, wheelRadius, -width/2 - 0.02f), wheelAngle);
+        renderWheel(shader, baseModel, glm::vec3(3.3f, wheelRadius, width/2 + 0.02f), wheelAngle);
     }
     
-    void renderWheel(Shader& shader, glm::mat4 baseModel, glm::vec3 offset) {
+    void renderWheel(Shader& shader, glm::mat4 baseModel, glm::vec3 offset, float spinAngle = 0.0f) {
         glm::mat4 wheelModel = baseModel;
         wheelModel = glm::translate(wheelModel, offset);
-        wheelModel = glm::rotate(wheelModel, glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        // Wheel axle is along Z. Rolling spin + aesthetic 90° are both around Z.
+        wheelModel = glm::rotate(wheelModel, glm::radians(-spinAngle + 90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         
         // Tire (black rubber)
         shader.setMat4("model", wheelModel);
