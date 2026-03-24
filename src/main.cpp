@@ -56,6 +56,9 @@ void drawDirectionalArrow(Shader& shader, unsigned int cubeVAO, glm::vec3 positi
 void drawSpeedBump(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float width);
 void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO);
 void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO);
+void setFancyWindowContext(Shader& shader, unsigned int cubeVAO);
+void setFancyWindowYaw(float yawDeg);
+void drawFancyWindow(glm::vec3 position);
 void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO);
 void drawElevatorSystem(Shader& shader, unsigned int cubeVAO);
 unsigned int createCurvedBarrierVAO(int& outVertexCount);
@@ -75,7 +78,7 @@ unsigned int SCR_HEIGHT = 900;
 // Parking lot dimensions (meters)
 const float LOT_WIDTH = 140.0f;
 const float LOT_DEPTH = 100.0f;
-const float CEILING_HEIGHT = 3.5f;
+const float CEILING_HEIGHT = 5.0f;
 const float WALL_THICKNESS = 0.3f;
 const float PILLAR_SIZE = 0.5f;
 const float SPOT_WIDTH = 2.5f;
@@ -83,7 +86,7 @@ const float SPOT_DEPTH = 5.0f;
 const float LANE_WIDTH = 6.0f;
 const int EXTRA_FLOORS = 5;
 const int TOP_FLOOR_INDEX = 5;
-const float FLOOR_TO_FLOOR_HEIGHT = 5.0f;
+const float FLOOR_TO_FLOOR_HEIGHT = 6.5f;
 
 // Camera - starts in front of the outdoor escalator at pedestrian height
 BasicCamera camera(LOT_WIDTH + 34.0f, 1.7f, LOT_DEPTH * 0.78f - 1.45f);
@@ -118,6 +121,10 @@ unsigned int texElevatorButtons = 0;       // button overlay texture
 unsigned int texSevenSegment[10] = {0};    // 0..9 LED digit textures
 unsigned int escalatorBillboardVAO = 0;
 unsigned int texAarongBillboard = 0;
+
+Shader* gFancyWindowShader = nullptr;
+unsigned int gFancyWindowCubeVAO = 0;
+float gFancyWindowYawDeg = 0.0f;
 
 struct Elevator {
     enum class State {
@@ -1176,10 +1183,121 @@ void drawTexturedObjects(Shader& shader, unsigned int cubeVAO,
     }
 }
 
+void setFancyWindowContext(Shader& shader, unsigned int cubeVAO)
+{
+    gFancyWindowShader = &shader;
+    gFancyWindowCubeVAO = cubeVAO;
+}
+
+void setFancyWindowYaw(float yawDeg)
+{
+    gFancyWindowYawDeg = yawDeg;
+}
+
+void drawFancyWindow(glm::vec3 position)
+{
+    if (!gFancyWindowShader || gFancyWindowCubeVAO == 0) return;
+
+    Shader& shader = *gFancyWindowShader;
+    unsigned int cubeVAO = gFancyWindowCubeVAO;
+    float yawRad = glm::radians(gFancyWindowYawDeg);
+
+    const float windowW = 2.0f;
+    const float windowH = 1.7f;
+    const float frameDepth = 0.24f;
+    const float frameThick = 0.15f;
+    const float mullionThick = 0.06f;
+    const float glassT = 0.03f;
+    const float openAngle = glm::radians(30.0f);
+
+    glm::vec3 frameColor(0.10f, 0.11f, 0.13f);
+    glm::vec3 mullionColor(0.16f, 0.17f, 0.20f);
+    glm::vec3 glassColor(0.76f, 0.88f, 0.96f);
+
+    auto drawPart = [&](glm::vec3 localPos, glm::vec3 localScale, glm::vec3 color,
+                        float ambient, float diffuse, float specular, float shininess) {
+        glm::vec3 worldPos = position + glm::vec3(
+            std::cos(yawRad) * localPos.x + std::sin(yawRad) * localPos.z,
+            localPos.y,
+            -std::sin(yawRad) * localPos.x + std::cos(yawRad) * localPos.z
+        );
+        drawCubeRotated(shader, cubeVAO, worldPos, localScale,
+                        glm::vec3(0.0f, gFancyWindowYawDeg, 0.0f), color,
+                        3, ambient, diffuse, specular, shininess);
+    };
+
+    // Thick metallic outer frame
+    drawPart(glm::vec3(0.0f, windowH * 0.5f - frameThick * 0.5f, 0.0f),
+             glm::vec3(windowW, frameThick, frameDepth), frameColor,
+             0.08f, 0.42f, 0.90f, 160.0f);
+    drawPart(glm::vec3(0.0f, -windowH * 0.5f + frameThick * 0.5f, 0.0f),
+             glm::vec3(windowW, frameThick, frameDepth), frameColor,
+             0.08f, 0.42f, 0.90f, 160.0f);
+    drawPart(glm::vec3(-windowW * 0.5f + frameThick * 0.5f, 0.0f, 0.0f),
+             glm::vec3(frameThick, windowH, frameDepth), frameColor,
+             0.08f, 0.42f, 0.90f, 160.0f);
+    drawPart(glm::vec3(windowW * 0.5f - frameThick * 0.5f, 0.0f, 0.0f),
+             glm::vec3(frameThick, windowH, frameDepth), frameColor,
+             0.08f, 0.42f, 0.90f, 160.0f);
+
+    // Thin inner mullions with depth
+    drawPart(glm::vec3(0.0f, 0.0f, 0.0f),
+             glm::vec3(mullionThick, windowH - 2.0f * frameThick, frameDepth * 0.92f),
+             mullionColor, 0.08f, 0.45f, 0.85f, 140.0f);
+    drawPart(glm::vec3(0.0f, 0.0f, 0.0f),
+             glm::vec3(windowW - 2.0f * frameThick, mullionThick, frameDepth * 0.92f),
+             mullionColor, 0.08f, 0.45f, 0.85f, 140.0f);
+
+    // Openable glass panes: side-hinged, swung outward ~30 degrees
+    float innerW = windowW - 2.0f * frameThick;
+    float paneW = innerW * 0.5f - mullionThick * 0.5f;
+    float paneH = windowH - 2.0f * frameThick;
+    float halfInner = innerW * 0.5f;
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+
+    shader.setInt("useTexture", 0);
+    shader.setInt("textureType", 4);
+    shader.setVec3("objectColor", glassColor);
+    shader.setFloat("ambientStrength", 0.03f);
+    shader.setFloat("diffuseStrength", 0.12f);
+    shader.setFloat("specularStrength", 1.0f);
+    shader.setFloat("shininess", 256.0f);
+    shader.setFloat("objectAlpha", 0.30f);
+
+    glm::mat4 leftGlass = glm::mat4(1.0f);
+    leftGlass = glm::translate(leftGlass, position);
+    leftGlass = glm::rotate(leftGlass, yawRad, glm::vec3(0.0f, 1.0f, 0.0f));
+    leftGlass = glm::translate(leftGlass, glm::vec3(-halfInner, 0.0f, 0.0f));
+    leftGlass = glm::rotate(leftGlass, openAngle, glm::vec3(0.0f, 1.0f, 0.0f));
+    leftGlass = glm::translate(leftGlass, glm::vec3(paneW * 0.5f, 0.0f, 0.0f));
+    leftGlass = glm::scale(leftGlass, glm::vec3(paneW, paneH, glassT));
+    shader.setMat4("model", leftGlass);
+    glBindVertexArray(cubeVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    glm::mat4 rightGlass = glm::mat4(1.0f);
+    rightGlass = glm::translate(rightGlass, position);
+    rightGlass = glm::rotate(rightGlass, yawRad, glm::vec3(0.0f, 1.0f, 0.0f));
+    rightGlass = glm::translate(rightGlass, glm::vec3(halfInner, 0.0f, 0.0f));
+    rightGlass = glm::rotate(rightGlass, -openAngle, glm::vec3(0.0f, 1.0f, 0.0f));
+    rightGlass = glm::translate(rightGlass, glm::vec3(-paneW * 0.5f, 0.0f, 0.0f));
+    rightGlass = glm::scale(rightGlass, glm::vec3(paneW, paneH, glassT));
+    shader.setMat4("model", rightGlass);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    shader.setFloat("objectAlpha", 1.0f);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+}
+
 void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO)
 {
     glm::vec3 concreteColor(0.42f, 0.41f, 0.39f);
     glm::vec3 wallColor(0.38f, 0.37f, 0.36f);
+    setFancyWindowContext(shader, cubeVAO);
     auto escalatorLayout = EscalatorSystem::computeLayout(FLOOR_TO_FLOOR_HEIGHT, LOT_WIDTH, LOT_DEPTH, WALL_THICKNESS);
     float gateOpeningDepth = 4.8f;
     float gateOpeningStartZ = escalatorLayout.connectZ - gateOpeningDepth * 0.5f;
@@ -1188,44 +1306,105 @@ void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int q
     shader.setInt("useTexture", 0);
 
     for (int floor = 1; floor <= EXTRA_FLOORS; ++floor) {
-        float yBase = floor * FLOOR_TO_FLOOR_HEIGHT;
+        float floorY = floor * FLOOR_TO_FLOOR_HEIGHT;
+        float ceilingY = floorY + FLOOR_TO_FLOOR_HEIGHT;
+        float wallHeight = ceilingY - floorY;
+        float wallCenterY = 0.5f * (floorY + ceilingY);
 
         float shaftOpeningW = elevator.shaftWidth + 0.35f;
         float shaftOpeningD = elevator.shaftDepth + 0.35f;
-        drawSlabWithOpening(shader, quadVAO, yBase,
+        drawSlabWithOpening(shader, quadVAO, floorY,
                             concreteColor, 0, 0.12f, 0.65f, 0.2f, 20.0f,
                             elevator.shaftCenter.x, elevator.shaftCenter.z,
                             shaftOpeningW, shaftOpeningD, false);
 
-        float wallY = yBase + CEILING_HEIGHT * 0.5f;
-        drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH / 2.0f, wallY, -WALL_THICKNESS / 2.0f),
-                 glm::vec3(LOT_WIDTH, CEILING_HEIGHT, WALL_THICKNESS), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
-        drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH / 2.0f, wallY, LOT_DEPTH + WALL_THICKNESS / 2.0f),
-                 glm::vec3(LOT_WIDTH, CEILING_HEIGHT, WALL_THICKNESS), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
-        drawCube(shader, cubeVAO, glm::vec3(-WALL_THICKNESS / 2.0f, wallY, LOT_DEPTH / 2.0f),
-                 glm::vec3(WALL_THICKNESS, CEILING_HEIGHT, LOT_DEPTH), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+        drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH / 2.0f, wallCenterY, -WALL_THICKNESS / 2.0f),
+                 glm::vec3(LOT_WIDTH, wallHeight, WALL_THICKNESS), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+        drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH / 2.0f, wallCenterY, LOT_DEPTH + WALL_THICKNESS / 2.0f),
+                 glm::vec3(LOT_WIDTH, wallHeight, WALL_THICKNESS), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+        drawCube(shader, cubeVAO, glm::vec3(-WALL_THICKNESS / 2.0f, wallCenterY, LOT_DEPTH / 2.0f),
+                 glm::vec3(WALL_THICKNESS, wallHeight, LOT_DEPTH), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
 
         // First floor: make a real side opening behind the glass gate for entry.
         if (floor == 1) {
             float backLen = std::max(0.0f, gateOpeningStartZ);
             if (backLen > 0.001f) {
                 drawCube(shader, cubeVAO,
-                         glm::vec3(LOT_WIDTH + WALL_THICKNESS / 2.0f, wallY, backLen * 0.5f),
-                         glm::vec3(WALL_THICKNESS, CEILING_HEIGHT, backLen),
+                         glm::vec3(LOT_WIDTH + WALL_THICKNESS / 2.0f, wallCenterY, backLen * 0.5f),
+                         glm::vec3(WALL_THICKNESS, wallHeight, backLen),
                          wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
             }
 
             float frontLen = std::max(0.0f, LOT_DEPTH - gateOpeningEndZ);
             if (frontLen > 0.001f) {
                 drawCube(shader, cubeVAO,
-                         glm::vec3(LOT_WIDTH + WALL_THICKNESS / 2.0f, wallY, gateOpeningEndZ + frontLen * 0.5f),
-                         glm::vec3(WALL_THICKNESS, CEILING_HEIGHT, frontLen),
+                         glm::vec3(LOT_WIDTH + WALL_THICKNESS / 2.0f, wallCenterY, gateOpeningEndZ + frontLen * 0.5f),
+                         glm::vec3(WALL_THICKNESS, wallHeight, frontLen),
                          wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
             }
         } else {
-            drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH + WALL_THICKNESS / 2.0f, wallY, LOT_DEPTH / 2.0f),
-                     glm::vec3(WALL_THICKNESS, CEILING_HEIGHT, LOT_DEPTH), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+            drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH + WALL_THICKNESS / 2.0f, wallCenterY, LOT_DEPTH / 2.0f),
+                     glm::vec3(WALL_THICKNESS, wallHeight, LOT_DEPTH), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
         }
+
+        // Window placement at fixed intervals (skip floor 1 right side where gate opening exists)
+        float windowY = floorY + wallHeight * 0.58f;
+        float sideZs[3] = { LOT_DEPTH * 0.22f, LOT_DEPTH * 0.50f, LOT_DEPTH * 0.78f };
+        float backXs[4] = { LOT_WIDTH * 0.14f, LOT_WIDTH * 0.34f, LOT_WIDTH * 0.58f, LOT_WIDTH * 0.82f };
+
+        // Left wall windows
+        setFancyWindowYaw(90.0f);
+        for (int i = 0; i < 3; ++i) {
+            drawFancyWindow(glm::vec3(-WALL_THICKNESS * 0.5f - 0.06f, windowY, sideZs[i]));
+        }
+
+        // Back wall windows
+        setFancyWindowYaw(0.0f);
+        for (int i = 0; i < 4; ++i) {
+            drawFancyWindow(glm::vec3(backXs[i], windowY, -WALL_THICKNESS * 0.5f - 0.06f));
+        }
+
+        // Right wall windows on upper floors only (floor 1 kept as entrance opening)
+        if (floor >= 2) {
+            setFancyWindowYaw(90.0f);
+            for (int i = 0; i < 3; ++i) {
+                drawFancyWindow(glm::vec3(LOT_WIDTH + WALL_THICKNESS * 0.5f + 0.06f, windowY, sideZs[i]));
+            }
+        }
+
+        // First-floor interior fixtures (same toggle keys as ground floor)
+        if (floor == 1) {
+            // Ceiling lights (key 2)
+            for (int i = 0; i < 4; ++i) {
+                for (int j = 0; j < 3; ++j) {
+                    float x = (LOT_WIDTH / 4.0f) * (i + 0.5f);
+                    float z = (LOT_DEPTH / 3.0f) * (j + 0.5f);
+                    drawCube(shader, cubeVAO, glm::vec3(x, ceilingY - 0.18f, z),
+                             glm::vec3(1.1f, 0.10f, 0.38f), glm::vec3(0.80f, 0.80f, 0.82f),
+                             3, 0.2f, 0.6f, 0.7f, 48.0f);
+
+                    glm::vec3 panelColor = ceilingLightsOn ? glm::vec3(1.0f, 0.98f, 0.90f)
+                                                           : glm::vec3(0.2f, 0.18f, 0.15f);
+                    drawCube(shader, cubeVAO, glm::vec3(x, ceilingY - 0.25f, z),
+                             glm::vec3(0.90f, 0.05f, 0.28f), panelColor, 4,
+                             ceilingLightsOn ? 0.9f : 0.1f, 0.3f, 0.2f, 8.0f);
+                }
+            }
+
+            // Bar lights near first-floor escalator gate (key 1)
+            float barY = floorY + 1.6f;
+            glm::vec3 barColor = entranceLightsOn ? glm::vec3(1.0f, 0.82f, 0.55f)
+                                                  : glm::vec3(0.20f, 0.16f, 0.12f);
+            float barX = LOT_WIDTH - 0.9f;
+            drawCube(shader, cubeVAO, glm::vec3(barX, barY, escalatorLayout.connectZ - 1.4f),
+                     glm::vec3(0.16f, 0.16f, 1.8f), barColor, 4,
+                     entranceLightsOn ? 0.9f : 0.1f, 0.35f, 0.25f, 12.0f);
+            drawCube(shader, cubeVAO, glm::vec3(barX, barY, escalatorLayout.connectZ + 1.4f),
+                     glm::vec3(0.16f, 0.16f, 1.8f), barColor, 4,
+                     entranceLightsOn ? 0.9f : 0.1f, 0.35f, 0.25f, 12.0f);
+        }
+
+        shader.setInt("useTexture", 0);
     }
 }
 
@@ -1469,80 +1648,70 @@ void setupLighting(Shader& shader)
         shader.setVec3("dirLight.specular", glm::vec3(1.2f, 1.15f, 1.0f));
     }
 
-    int totalPointLights = 0;
+    // Clear all point lights first so only active ones contribute.
+    for (int i = 0; i < 32; ++i) {
+        std::string base = "pointLights[" + std::to_string(i) + "]";
+        shader.setVec3(base + ".position", glm::vec3(0.0f));
+        shader.setVec3(base + ".ambient", glm::vec3(0.0f));
+        shader.setVec3(base + ".diffuse", glm::vec3(0.0f));
+        shader.setVec3(base + ".specular", glm::vec3(0.0f));
+        shader.setFloat(base + ".constant", 1.0f);
+        shader.setFloat(base + ".linear", 0.09f);
+        shader.setFloat(base + ".quadratic", 0.032f);
+    }
 
-    // --- Ceiling Lights (Indices 0-11) ---
+    int lightIdx = 0;
+
+    // --- Ceiling Lights (Key 2): ground floor + first floor ---
     if (ceilingLightsOn) {
         float lightSpacingX = LOT_WIDTH / 4.0f;
         float lightSpacingZ = LOT_DEPTH / 3.0f;
-        int lightIdx = 0;
-        for (int i = 0; i < 4 && lightIdx < 12; i++) {
-            for (int j = 0; j < 3 && lightIdx < 12; j++) {
-                float x = lightSpacingX * (i + 0.5f);
-                float z = lightSpacingZ * (j + 0.5f);
-                std::string base = "pointLights[" + std::to_string(lightIdx) + "]";
-                shader.setVec3(base + ".position", glm::vec3(x, CEILING_HEIGHT - 0.3f, z));
-                shader.setVec3(base + ".ambient", glm::vec3(0.18f, 0.16f, 0.12f));
-                shader.setVec3(base + ".diffuse", glm::vec3(1.4f, 1.3f, 1.1f));
-                shader.setVec3(base + ".specular", glm::vec3(1.3f, 1.2f, 1.0f));
-                shader.setFloat(base + ".constant", 1.0f);
-                shader.setFloat(base + ".linear", 0.09f);
-                shader.setFloat(base + ".quadratic", 0.032f);
-                lightIdx++;
+
+        for (int level = 0; level < 2; ++level) {
+            float levelCeilingY = level * FLOOR_TO_FLOOR_HEIGHT + FLOOR_TO_FLOOR_HEIGHT;
+            for (int i = 0; i < 4; ++i) {
+                for (int j = 0; j < 3; ++j) {
+                    if (lightIdx >= 32) break;
+                    float x = lightSpacingX * (i + 0.5f);
+                    float z = lightSpacingZ * (j + 0.5f);
+                    std::string base = "pointLights[" + std::to_string(lightIdx) + "]";
+                    shader.setVec3(base + ".position", glm::vec3(x, levelCeilingY - 0.3f, z));
+                    shader.setVec3(base + ".ambient", glm::vec3(0.18f, 0.16f, 0.12f));
+                    shader.setVec3(base + ".diffuse", glm::vec3(1.4f, 1.3f, 1.1f));
+                    shader.setVec3(base + ".specular", glm::vec3(1.3f, 1.2f, 1.0f));
+                    lightIdx++;
+                }
             }
         }
-        totalPointLights = 12;
     }
 
-    // --- Entrance Rod Lights (Indices 12-13) ---
+    // --- Bar Lights (Key 1): ground entrance + first-floor gate zone ---
     if (entranceLightsOn) {
-        // Left rod light
-        std::string rodLeft = "pointLights[12]";
-        shader.setVec3(rodLeft + ".position", glm::vec3(LOT_WIDTH/2 - 6.0f, 1.5f, LOT_DEPTH - 1.0f));
-        shader.setVec3(rodLeft + ".ambient", glm::vec3(0.15f, 0.12f, 0.08f));
-        shader.setVec3(rodLeft + ".diffuse", glm::vec3(1.3f, 1.0f, 0.7f));
-        shader.setVec3(rodLeft + ".specular", glm::vec3(1.2f, 1.0f, 0.8f));
-        shader.setFloat(rodLeft + ".constant", 1.0f);
-        shader.setFloat(rodLeft + ".linear", 0.09f);
-        shader.setFloat(rodLeft + ".quadratic", 0.032f);
-        
-        // Right rod light
-        std::string rodRight = "pointLights[13]";
-        shader.setVec3(rodRight + ".position", glm::vec3(LOT_WIDTH/2 + 6.0f, 1.5f, LOT_DEPTH - 1.0f));
-        shader.setVec3(rodRight + ".ambient", glm::vec3(0.15f, 0.12f, 0.08f));
-        shader.setVec3(rodRight + ".diffuse", glm::vec3(1.3f, 1.0f, 0.7f));
-        shader.setVec3(rodRight + ".specular", glm::vec3(1.2f, 1.0f, 0.8f));
-        shader.setFloat(rodRight + ".constant", 1.0f);
-        shader.setFloat(rodRight + ".linear", 0.09f);
-        shader.setFloat(rodRight + ".quadratic", 0.032f);
-        
-        if (totalPointLights < 14) totalPointLights = 14; 
-    }
-
-    // If one system is off but the other is on, we still need to make sure the "off" lights aren't contributing
-    // Actually, shader expects numPointLights. We should probably only pass the lights that are ON, 
-    // BUT the indices are fixed in my logic (12-13 for entrance).
-    // Let's adjust to pass all 14 and zero out the ones that are off if necessary, 
-    // OR just set numPointLights to 14 and ensure the "off" ones have 0 intensity.
-
-    if (!ceilingLightsOn) {
-        for (int i = 0; i < 12; i++) {
-            std::string base = "pointLights[" + std::to_string(i) + "]";
-            shader.setVec3(base + ".diffuse", glm::vec3(0.0f));
-            shader.setVec3(base + ".specular", glm::vec3(0.0f));
-            shader.setVec3(base + ".ambient", glm::vec3(0.0f));
+        // Ground-floor bar pair
+        for (int s = 0; s < 2 && lightIdx < 32; ++s) {
+            float x = LOT_WIDTH / 2.0f + (s == 0 ? -6.0f : 6.0f);
+            std::string base = "pointLights[" + std::to_string(lightIdx) + "]";
+            shader.setVec3(base + ".position", glm::vec3(x, 1.5f, LOT_DEPTH - 1.0f));
+            shader.setVec3(base + ".ambient", glm::vec3(0.15f, 0.12f, 0.08f));
+            shader.setVec3(base + ".diffuse", glm::vec3(1.3f, 1.0f, 0.7f));
+            shader.setVec3(base + ".specular", glm::vec3(1.2f, 1.0f, 0.8f));
+            lightIdx++;
         }
-    }
-    if (!entranceLightsOn) {
-        for (int i = 12; i < 14; i++) {
-            std::string base = "pointLights[" + std::to_string(i) + "]";
-            shader.setVec3(base + ".diffuse", glm::vec3(0.0f));
-            shader.setVec3(base + ".specular", glm::vec3(0.0f));
-            shader.setVec3(base + ".ambient", glm::vec3(0.0f));
+
+        // First-floor bar pair (near escalator gate)
+        auto escalatorLayout = EscalatorSystem::computeLayout(FLOOR_TO_FLOOR_HEIGHT, LOT_WIDTH, LOT_DEPTH, WALL_THICKNESS);
+        for (int s = 0; s < 2 && lightIdx < 32; ++s) {
+            float z = escalatorLayout.connectZ + (s == 0 ? -1.4f : 1.4f);
+            std::string base = "pointLights[" + std::to_string(lightIdx) + "]";
+            shader.setVec3(base + ".position", glm::vec3(LOT_WIDTH - 1.0f, FLOOR_TO_FLOOR_HEIGHT + 1.6f, z));
+            shader.setVec3(base + ".ambient", glm::vec3(0.15f, 0.12f, 0.08f));
+            shader.setVec3(base + ".diffuse", glm::vec3(1.3f, 1.0f, 0.7f));
+            shader.setVec3(base + ".specular", glm::vec3(1.2f, 1.0f, 0.8f));
+            lightIdx++;
         }
     }
 
-    shader.setInt("numPointLights", (ceilingLightsOn || entranceLightsOn) ? 14 : 0);
+    shader.setInt("numPointLights", lightIdx);
 }
 
 void drawCube(Shader& shader, unsigned int VAO, glm::vec3 position, glm::vec3 scale, 

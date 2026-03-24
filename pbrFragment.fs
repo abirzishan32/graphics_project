@@ -32,7 +32,7 @@ uniform DirLight dirLight;
 uniform bool useDirLight;
 
 // Point Lights (ceiling fixtures + entrance bars)
-#define MAX_POINT_LIGHTS 16
+#define MAX_POINT_LIGHTS 32
 struct PointLight {
     vec3 position;
     vec3 ambient;
