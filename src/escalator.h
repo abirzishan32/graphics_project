@@ -221,6 +221,13 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
         glm::vec3 combColor(0.22f, 0.24f, 0.26f);
         float stepTravelY0 = 0.16f;
 
+        // Geometric step constants (used for perfect no-gap stair tiling).
+        const float stepDepth = 0.62f;      // horizontal tread depth (local z axis of escalator profile)
+        const float stepRise = 0.18f;       // vertical riser height
+        const float treadThickness = 0.08f;
+        const float riserThickness = 0.05f;
+        const float stepWidth = l.laneWidth - 0.34f;
+
         // Metallic truss chassis (no solid wedge body)
         glm::vec3 inclineCenter((xBottomToIncline + xTopFromIncline) * 0.5f,
                                 inclineRise * 0.5f,
@@ -294,6 +301,36 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
                  glm::vec3(landingLen, 0.055f, 0.06f),
                  glm::vec3(0.08f, 0.08f, 0.09f), 3, 0.05f, 0.35f, 0.95f, 180.0f);
 
+        // Side balustrade base panels (opaque lower skirt, practical hand-rest support)
+        drawCube(shader, cubeVAO,
+             glm::vec3(xBottomFlatCenter, 0.42f, laneZ - l.laneWidth * 0.5f),
+             glm::vec3(landingLen, 0.48f, 0.08f),
+             glm::vec3(0.50f, 0.54f, 0.60f), 3, 0.08f, 0.42f, 0.80f, 120.0f);
+        drawCube(shader, cubeVAO,
+             glm::vec3(xBottomFlatCenter, 0.42f, laneZ + l.laneWidth * 0.5f),
+             glm::vec3(landingLen, 0.48f, 0.08f),
+             glm::vec3(0.50f, 0.54f, 0.60f), 3, 0.08f, 0.42f, 0.80f, 120.0f);
+
+        drawCubeRotated(shader, cubeVAO,
+                inclineCenter + glm::vec3(0.0f, 0.42f - inclineRise * 0.5f, -l.laneWidth * 0.5f),
+                glm::vec3(inclineLen, 0.48f, 0.08f),
+                glm::vec3(0.0f, 0.0f, -inclineAngle),
+                glm::vec3(0.50f, 0.54f, 0.60f), 3, 0.08f, 0.42f, 0.80f, 120.0f);
+        drawCubeRotated(shader, cubeVAO,
+                inclineCenter + glm::vec3(0.0f, 0.42f - inclineRise * 0.5f, l.laneWidth * 0.5f),
+                glm::vec3(inclineLen, 0.48f, 0.08f),
+                glm::vec3(0.0f, 0.0f, -inclineAngle),
+                glm::vec3(0.50f, 0.54f, 0.60f), 3, 0.08f, 0.42f, 0.80f, 120.0f);
+
+        drawCube(shader, cubeVAO,
+             glm::vec3(xTopFlatCenter, inclineRise + 0.42f, laneZ - l.laneWidth * 0.5f),
+             glm::vec3(landingLen, 0.48f, 0.08f),
+             glm::vec3(0.50f, 0.54f, 0.60f), 3, 0.08f, 0.42f, 0.80f, 120.0f);
+        drawCube(shader, cubeVAO,
+             glm::vec3(xTopFlatCenter, inclineRise + 0.42f, laneZ + l.laneWidth * 0.5f),
+             glm::vec3(landingLen, 0.48f, 0.08f),
+             glm::vec3(0.50f, 0.54f, 0.60f), 3, 0.08f, 0.42f, 0.80f, 120.0f);
+
         // Glass balustrades (outside + inside lane boundary)
         glm::vec3 glassColor(0.76f, 0.86f, 0.95f);
         float glassH = 1.0f;
@@ -327,48 +364,108 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
                       glm::vec3(landingLen, glassH, 0.03f), glassColor,
                       4, 0.05f, 0.14f, 1.0f, 220.0f, 0.22f);
 
-        // Animated right-angled step geometry (tread + riser)
-        const int stepCount = 34;
-        float motion = std::fmod((float)glfwGetTime() * 0.22f, 1.0f);
-        float loopLen = landingLen + inclineRun + landingLen + (landingLen + inclineRun + landingLen);
+        // Handrail capping strips directly above glass for clear human hand-rest surfaces.
+        drawCube(shader, cubeVAO,
+                 glm::vec3(xBottomFlatCenter, 1.28f, laneZ - l.laneWidth * 0.48f),
+                 glm::vec3(landingLen, 0.075f, 0.09f),
+                 glm::vec3(0.07f, 0.07f, 0.08f), 3, 0.05f, 0.34f, 0.98f, 210.0f);
+        drawCube(shader, cubeVAO,
+                 glm::vec3(xBottomFlatCenter, 1.28f, laneZ + l.laneWidth * 0.48f),
+                 glm::vec3(landingLen, 0.075f, 0.09f),
+                 glm::vec3(0.07f, 0.07f, 0.08f), 3, 0.05f, 0.34f, 0.98f, 210.0f);
+
+        drawCubeRotated(shader, cubeVAO,
+                        inclineCenter + glm::vec3(0.0f, 1.28f - inclineRise * 0.5f, -l.laneWidth * 0.48f),
+                        glm::vec3(inclineLen, 0.075f, 0.09f),
+                        glm::vec3(0.0f, 0.0f, -inclineAngle),
+                        glm::vec3(0.07f, 0.07f, 0.08f), 3, 0.05f, 0.34f, 0.98f, 210.0f);
+        drawCubeRotated(shader, cubeVAO,
+                        inclineCenter + glm::vec3(0.0f, 1.28f - inclineRise * 0.5f, l.laneWidth * 0.48f),
+                        glm::vec3(inclineLen, 0.075f, 0.09f),
+                        glm::vec3(0.0f, 0.0f, -inclineAngle),
+                        glm::vec3(0.07f, 0.07f, 0.08f), 3, 0.05f, 0.34f, 0.98f, 210.0f);
+
+        drawCube(shader, cubeVAO,
+                 glm::vec3(xTopFlatCenter, inclineRise + 1.28f, laneZ - l.laneWidth * 0.48f),
+                 glm::vec3(landingLen, 0.075f, 0.09f),
+                 glm::vec3(0.07f, 0.07f, 0.08f), 3, 0.05f, 0.34f, 0.98f, 210.0f);
+        drawCube(shader, cubeVAO,
+                 glm::vec3(xTopFlatCenter, inclineRise + 1.28f, laneZ + l.laneWidth * 0.48f),
+                 glm::vec3(landingLen, 0.075f, 0.09f),
+                 glm::vec3(0.07f, 0.07f, 0.08f), 3, 0.05f, 0.34f, 0.98f, 210.0f);
+
+        // Opaque side skirt to block any view to ground between moving steps.
+        drawCubeRotated(shader, cubeVAO,
+                        inclineCenter + glm::vec3(0.0f, 0.02f, 0.0f),
+                        glm::vec3(inclineLen, 0.22f, stepWidth),
+                        glm::vec3(0.0f, 0.0f, -inclineAngle),
+                        glm::vec3(0.18f, 0.19f, 0.21f), 3,
+                        0.06f, 0.40f, 0.35f, 42.0f);
+
+        // Animated right-angled steps with mathematically exact tread/riser pitch.
+        // Local escalator profile coordinates (z forward, y up):
+        //   y_offset = i * pitch * sin(theta)
+        //   z_offset = i * pitch * cos(theta)
+        // with pitch = stepDepth / cos(theta) and tan(theta) = stepRise / stepDepth.
+        // This simplifies exactly to: y_offset = i * stepRise, z_offset = i * stepDepth.
+        const int stepCount = 44;
+        const float stepRate = 2.05f; // steps/second
+        float phase = std::fmod((float)glfwGetTime() * stepRate, 1.0f);
+        float inclineAngleRad = glm::radians(inclineAngle);
+        float stepPitch = stepDepth / glm::cos(inclineAngleRad);
         float visibleLen = landingLen + inclineRun + landingLen;
+        float sideDir = upDirection ? 1.0f : -1.0f;
 
         for (int i = 0; i < stepCount; ++i) {
-            float u = ((float)i / (float)stepCount + motion);
-            u = std::fmod(u, 1.0f);
-            float s = upDirection ? u : (1.0f - u);
-            float d = s * loopLen;
+            float idx = (float)i + phase;
+            float y_offset = idx * stepPitch * glm::sin(inclineAngleRad); // == idx * stepRise
+            float z_offset = idx * stepPitch * glm::cos(inclineAngleRad); // == idx * stepDepth
+
+            // Escalator forward is toward -X in world for up lane. Keep naming z_offset
+            // because this is local profile forward distance.
+            float d = std::fmod(z_offset, visibleLen);
 
             float x = xBottomFlatCenter;
             float y = stepTravelY0;
 
             if (d < landingLen) {
                 float t = d / landingLen;
-                x = l.baseX - t * landingLen;
+                x = upDirection ? (l.baseX - t * landingLen) : (l.topX + t * landingLen);
                 y = stepTravelY0;
             } else if (d < landingLen + inclineRun) {
                 float t = (d - landingLen) / inclineRun;
-                x = xBottomToIncline - t * inclineRun;
-                y = stepTravelY0 + t * inclineRise;
+                if (upDirection) {
+                    x = xBottomToIncline - t * inclineRun;
+                    y = stepTravelY0 + t * inclineRise;
+                } else {
+                    x = xTopFromIncline + t * inclineRun;
+                    y = stepTravelY0 + inclineRise - t * inclineRise;
+                }
             } else if (d < visibleLen) {
                 float t = (d - landingLen - inclineRun) / landingLen;
-                x = xTopFromIncline - t * landingLen;
+                x = upDirection ? (xTopFromIncline - t * landingLen) : (xBottomToIncline + t * landingLen);
                 y = stepTravelY0 + inclineRise;
             } else {
                 continue;
             }
 
-            // Tread (horizontal)
+            // Lane direction phase shift keeps both lanes moving opposite while sharing geometry.
+            x += sideDir * 0.0f;
+
+            // Tread (horizontal top surface)
             drawCube(shader, cubeVAO,
                      glm::vec3(x, y, laneZ),
-                     glm::vec3(0.62f, 0.08f, l.laneWidth - 0.34f),
+                     glm::vec3(stepDepth, treadThickness, stepWidth),
                      glm::vec3(0.14f, 0.14f, 0.15f), 7,
                      0.08f, 0.52f, 0.35f, 48.0f);
 
-            // Riser (vertical face behind tread => 90-degree right angle)
+            // Riser (vertical face at tread back edge, tightly matches next-step rise)
             drawCube(shader, cubeVAO,
-                     glm::vec3(x + 0.26f, y - 0.06f, laneZ),
-                     glm::vec3(0.05f, 0.12f, l.laneWidth - 0.34f),
+                     glm::vec3(x + (upDirection ? (stepDepth * 0.5f - riserThickness * 0.5f)
+                                                : -(stepDepth * 0.5f - riserThickness * 0.5f)),
+                               y - (stepRise * 0.5f + treadThickness * 0.5f),
+                               laneZ),
+                     glm::vec3(riserThickness, stepRise + treadThickness, stepWidth),
                      glm::vec3(0.12f, 0.12f, 0.13f), 7,
                      0.08f, 0.45f, 0.25f, 36.0f);
         }
