@@ -180,10 +180,16 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
     drawQuad(shader, quadVAO, branchV,
              glm::vec3(0.22f, 0.22f, 0.24f), 0, 0.12f, 0.56f, 0.2f, 20.0f);
 
-    // Detailed escalator proportions
+    // Detailed escalator proportions (anchored exactly to ground and first-floor levels)
+    const float groundY = 0.0f;
+    const float topFloorY = l.firstFloorY;
+    const float landingThick = 0.08f;
+    const float bottomLandingCenterY = groundY + landingThick * 0.5f;
+    const float topLandingCenterY = topFloorY - landingThick * 0.5f;
+
     float landingLen = 2.3f;
     float inclineRun = std::max(2.5f, l.run - 2.0f * landingLen);
-    float inclineRise = l.rise;
+    float inclineRise = topLandingCenterY - bottomLandingCenterY;
     float inclineLen = std::sqrt(inclineRun * inclineRun + inclineRise * inclineRise);
     float inclineAngle = glm::degrees(std::atan2(inclineRise, inclineRun));
 
@@ -219,7 +225,7 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
     auto drawEscalatorLane = [&](float laneZ, bool upDirection) {
         glm::vec3 metalSide(0.58f, 0.62f, 0.69f);
         glm::vec3 combColor(0.22f, 0.24f, 0.26f);
-        float stepTravelY0 = 0.16f;
+        float stepTravelY0 = bottomLandingCenterY;
 
         // Geometric step constants (used for perfect no-gap stair tiling).
         const float stepDepth = 0.62f;      // horizontal tread depth (local z axis of escalator profile)
@@ -230,8 +236,8 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
 
         // Metallic truss chassis (no solid wedge body)
         glm::vec3 inclineCenter((xBottomToIncline + xTopFromIncline) * 0.5f,
-                                inclineRise * 0.5f,
-                                laneZ);
+                    (bottomLandingCenterY + topLandingCenterY) * 0.5f,
+                    laneZ);
 
         drawCubeRotated(shader, cubeVAO, inclineCenter + glm::vec3(0.0f, -0.10f, -l.laneWidth * 0.48f),
                         glm::vec3(inclineLen, 0.16f, 0.10f),
@@ -260,7 +266,7 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
                  glm::vec3(landingLen, 0.06f, l.laneWidth - 0.25f),
                  combColor, 3, 0.08f, 0.42f, 0.85f, 160.0f);
         drawCube(shader, cubeVAO,
-                 glm::vec3(xTopFlatCenter, inclineRise + stepTravelY0, laneZ),
+             glm::vec3(xTopFlatCenter, topLandingCenterY, laneZ),
                  glm::vec3(landingLen, 0.06f, l.laneWidth - 0.25f),
                  combColor, 3, 0.08f, 0.42f, 0.85f, 160.0f);
 
@@ -268,8 +274,8 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
         float newelRadius = 0.58f;
         drawHandrailLoop(xBottomToIncline, 0.72f, laneZ - l.laneWidth * 0.5f, newelRadius, false);
         drawHandrailLoop(xBottomToIncline, 0.72f, laneZ + l.laneWidth * 0.5f, newelRadius, false);
-        drawHandrailLoop(xTopFromIncline, inclineRise + 0.72f, laneZ - l.laneWidth * 0.5f, newelRadius, true);
-        drawHandrailLoop(xTopFromIncline, inclineRise + 0.72f, laneZ + l.laneWidth * 0.5f, newelRadius, true);
+        drawHandrailLoop(xTopFromIncline, topLandingCenterY - bottomLandingCenterY + 0.72f, laneZ - l.laneWidth * 0.5f, newelRadius, true);
+        drawHandrailLoop(xTopFromIncline, topLandingCenterY - bottomLandingCenterY + 0.72f, laneZ + l.laneWidth * 0.5f, newelRadius, true);
 
         // Handrails (top run)
         drawCube(shader, cubeVAO,
@@ -293,11 +299,11 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
                         glm::vec3(0.08f, 0.08f, 0.09f), 3, 0.05f, 0.35f, 0.95f, 180.0f);
 
         drawCube(shader, cubeVAO,
-                 glm::vec3(xTopFlatCenter, inclineRise + 1.30f, laneZ - l.laneWidth * 0.5f),
+                 glm::vec3(xTopFlatCenter, topLandingCenterY - bottomLandingCenterY + 1.30f, laneZ - l.laneWidth * 0.5f),
                  glm::vec3(landingLen, 0.055f, 0.06f),
                  glm::vec3(0.08f, 0.08f, 0.09f), 3, 0.05f, 0.35f, 0.95f, 180.0f);
         drawCube(shader, cubeVAO,
-                 glm::vec3(xTopFlatCenter, inclineRise + 1.30f, laneZ + l.laneWidth * 0.5f),
+                 glm::vec3(xTopFlatCenter, topLandingCenterY - bottomLandingCenterY + 1.30f, laneZ + l.laneWidth * 0.5f),
                  glm::vec3(landingLen, 0.055f, 0.06f),
                  glm::vec3(0.08f, 0.08f, 0.09f), 3, 0.05f, 0.35f, 0.95f, 180.0f);
 
@@ -323,11 +329,11 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
                 glm::vec3(0.50f, 0.54f, 0.60f), 3, 0.08f, 0.42f, 0.80f, 120.0f);
 
         drawCube(shader, cubeVAO,
-             glm::vec3(xTopFlatCenter, inclineRise + 0.42f, laneZ - l.laneWidth * 0.5f),
+               glm::vec3(xTopFlatCenter, topLandingCenterY - bottomLandingCenterY + 0.42f, laneZ - l.laneWidth * 0.5f),
              glm::vec3(landingLen, 0.48f, 0.08f),
              glm::vec3(0.50f, 0.54f, 0.60f), 3, 0.08f, 0.42f, 0.80f, 120.0f);
         drawCube(shader, cubeVAO,
-             glm::vec3(xTopFlatCenter, inclineRise + 0.42f, laneZ + l.laneWidth * 0.5f),
+               glm::vec3(xTopFlatCenter, topLandingCenterY - bottomLandingCenterY + 0.42f, laneZ + l.laneWidth * 0.5f),
              glm::vec3(landingLen, 0.48f, 0.08f),
              glm::vec3(0.50f, 0.54f, 0.60f), 3, 0.08f, 0.42f, 0.80f, 120.0f);
 
@@ -356,11 +362,11 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
                         4, 0.05f, 0.14f, 1.0f, 220.0f);
 
         drawCubeAlpha(shader, cubeVAO,
-                      glm::vec3(xTopFlatCenter, inclineRise + 0.78f, laneZ - l.laneWidth * 0.48f),
+                      glm::vec3(xTopFlatCenter, topLandingCenterY - bottomLandingCenterY + 0.78f, laneZ - l.laneWidth * 0.48f),
                       glm::vec3(landingLen, glassH, 0.03f), glassColor,
                       4, 0.05f, 0.14f, 1.0f, 220.0f, 0.22f);
         drawCubeAlpha(shader, cubeVAO,
-                      glm::vec3(xTopFlatCenter, inclineRise + 0.78f, laneZ + l.laneWidth * 0.48f),
+                      glm::vec3(xTopFlatCenter, topLandingCenterY - bottomLandingCenterY + 0.78f, laneZ + l.laneWidth * 0.48f),
                       glm::vec3(landingLen, glassH, 0.03f), glassColor,
                       4, 0.05f, 0.14f, 1.0f, 220.0f, 0.22f);
 
@@ -386,11 +392,11 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
                         glm::vec3(0.07f, 0.07f, 0.08f), 3, 0.05f, 0.34f, 0.98f, 210.0f);
 
         drawCube(shader, cubeVAO,
-                 glm::vec3(xTopFlatCenter, inclineRise + 1.28f, laneZ - l.laneWidth * 0.48f),
+                 glm::vec3(xTopFlatCenter, topLandingCenterY - bottomLandingCenterY + 1.28f, laneZ - l.laneWidth * 0.48f),
                  glm::vec3(landingLen, 0.075f, 0.09f),
                  glm::vec3(0.07f, 0.07f, 0.08f), 3, 0.05f, 0.34f, 0.98f, 210.0f);
         drawCube(shader, cubeVAO,
-                 glm::vec3(xTopFlatCenter, inclineRise + 1.28f, laneZ + l.laneWidth * 0.48f),
+                 glm::vec3(xTopFlatCenter, topLandingCenterY - bottomLandingCenterY + 1.28f, laneZ + l.laneWidth * 0.48f),
                  glm::vec3(landingLen, 0.075f, 0.09f),
                  glm::vec3(0.07f, 0.07f, 0.08f), 3, 0.05f, 0.34f, 0.98f, 210.0f);
 
@@ -414,43 +420,33 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
         float inclineAngleRad = glm::radians(inclineAngle);
         float stepPitch = stepDepth / glm::cos(inclineAngleRad);
         float visibleLen = landingLen + inclineRun + landingLen;
-        float sideDir = upDirection ? 1.0f : -1.0f;
 
         for (int i = 0; i < stepCount; ++i) {
             float idx = (float)i + phase;
             float y_offset = idx * stepPitch * glm::sin(inclineAngleRad); // == idx * stepRise
             float z_offset = idx * stepPitch * glm::cos(inclineAngleRad); // == idx * stepDepth
 
-            // Escalator forward is toward -X in world for up lane. Keep naming z_offset
-            // because this is local profile forward distance.
-            float d = std::fmod(z_offset, visibleLen);
+            float lanePhaseDistance = upDirection ? z_offset : (visibleLen - z_offset);
+            float d = std::fmod(lanePhaseDistance + visibleLen, visibleLen);
 
             float x = xBottomFlatCenter;
             float y = stepTravelY0;
 
             if (d < landingLen) {
                 float t = d / landingLen;
-                x = upDirection ? (l.baseX - t * landingLen) : (l.topX + t * landingLen);
+                x = l.baseX - t * landingLen;
                 y = stepTravelY0;
             } else if (d < landingLen + inclineRun) {
                 float t = (d - landingLen) / inclineRun;
-                if (upDirection) {
-                    x = xBottomToIncline - t * inclineRun;
-                    y = stepTravelY0 + t * inclineRise;
-                } else {
-                    x = xTopFromIncline + t * inclineRun;
-                    y = stepTravelY0 + inclineRise - t * inclineRise;
-                }
+                x = xBottomToIncline - t * inclineRun;
+                y = stepTravelY0 + t * inclineRise;
             } else if (d < visibleLen) {
                 float t = (d - landingLen - inclineRun) / landingLen;
-                x = upDirection ? (xTopFromIncline - t * landingLen) : (xBottomToIncline + t * landingLen);
-                y = stepTravelY0 + inclineRise;
+                x = xTopFromIncline - t * landingLen;
+                y = topLandingCenterY;
             } else {
                 continue;
             }
-
-            // Lane direction phase shift keeps both lanes moving opposite while sharing geometry.
-            x += sideDir * 0.0f;
 
             // Tread (horizontal top surface)
             drawCube(shader, cubeVAO,
