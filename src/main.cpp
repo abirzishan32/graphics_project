@@ -11,6 +11,7 @@
 #include "human_generator.h"
 #include "escalator.h"
 #include "first_floor_layout.h"
+#include "second_floor_layout.h"
 
 #include <iostream>
 #include <vector>
@@ -61,7 +62,7 @@ void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsig
 void setFancyWindowContext(Shader& shader, unsigned int cubeVAO);
 void setFancyWindowYaw(float yawDeg);
 void drawFancyWindow(glm::vec3 position);
-void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO);
+void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int sphereVAO, int sphereCount);
 void drawElevatorSystem(Shader& shader, unsigned int cubeVAO);
 unsigned int createCurvedBarrierVAO(int& outVertexCount);
 void drawCurvedBarrier(Shader& shader, unsigned int VAO, int vertexCount);
@@ -119,6 +120,7 @@ bool spaceKeyPressed = false;
 const char* BASE_WINDOW_TITLE = "Shoppning Mall";
 
 unsigned int texElevatorPanelBase = 0;     // wood-like base texture
+unsigned int texSofa = 0;                  // sofa texture for cinema
 unsigned int texElevatorButtons = 0;       // button overlay texture
 unsigned int texSevenSegment[10] = {0};    // 0..9 LED digit textures
 unsigned int escalatorBillboardVAO = 0;
@@ -395,6 +397,8 @@ int main()
         std::string path = "src/seven-segments/" + std::to_string(i) + ".png";
         texSevenSegment[i] = loadTexture(path.c_str());
     }
+    
+    texSofa = loadTexture("src/sofa.jpg");
 
     // Render loop
     while (!glfwWindowShouldClose(window)) {
@@ -1295,7 +1299,7 @@ void drawFancyWindow(glm::vec3 position)
     glDisable(GL_BLEND);
 }
 
-void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO)
+void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int sphereVAO, int sphereCount)
 {
     glm::vec3 concreteColor(0.42f, 0.41f, 0.39f);
     glm::vec3 wallColor(0.38f, 0.37f, 0.36f);
@@ -1444,24 +1448,26 @@ void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int q
         }
 
         // Window placement at fixed intervals (skip floor 1 right side where gate opening exists)
-
-        // Left wall windows
-        setFancyWindowYaw(90.0f);
-        for (int i = 0; i < 3; ++i) {
-            drawFancyWindow(glm::vec3(-WALL_THICKNESS * 0.5f - 0.06f, windowY, sideZs[i]));
-        }
-
-        // Back wall windows
-        setFancyWindowYaw(0.0f);
-        for (int i = 0; i < 4; ++i) {
-            drawFancyWindow(glm::vec3(backXs[i], windowY, -WALL_THICKNESS * 0.5f - 0.06f));
-        }
-
-        // Right wall windows on upper floors only (floor 1 kept as entrance opening)
-        if (floor >= 2) {
+        // Skip all windows on floor 2 to keep the cinema dark
+        if (floor != 2) {
+            // Left wall windows
             setFancyWindowYaw(90.0f);
             for (int i = 0; i < 3; ++i) {
-                drawFancyWindow(glm::vec3(LOT_WIDTH + WALL_THICKNESS * 0.5f + 0.06f, windowY, sideZs[i]));
+                drawFancyWindow(glm::vec3(-WALL_THICKNESS * 0.5f - 0.06f, windowY, sideZs[i]));
+            }
+
+            // Back wall windows
+            setFancyWindowYaw(0.0f);
+            for (int i = 0; i < 4; ++i) {
+                drawFancyWindow(glm::vec3(backXs[i], windowY, -WALL_THICKNESS * 0.5f - 0.06f));
+            }
+
+            // Right wall windows on upper floors only (floor 1 kept as entrance opening)
+            if (floor >= 2) {
+                setFancyWindowYaw(90.0f);
+                for (int i = 0; i < 3; ++i) {
+                    drawFancyWindow(glm::vec3(LOT_WIDTH + WALL_THICKNESS * 0.5f + 0.06f, windowY, sideZs[i]));
+                }
             }
         }
 
@@ -1497,6 +1503,9 @@ void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int q
             drawCube(shader, cubeVAO, glm::vec3(barX, barY, escalatorLayout.connectZ + 1.4f),
                      glm::vec3(0.16f, 0.16f, 1.8f), barColor, 4,
                      entranceLightsOn ? 0.9f : 0.1f, 0.35f, 0.25f, 12.0f);
+        } else if (floor == 2) {
+            SecondFloorDesign::setRenderContext(shader, cubeVAO, 16, sphereVAO, sphereCount, texSofa);
+            SecondFloorDesign::drawSecondFloorLayout(floorY, ceilingY);
         }
 
         shader.setInt("useTexture", 0);
@@ -1756,6 +1765,29 @@ void setupLighting(Shader& shader)
     }
 
     int lightIdx = 0;
+
+    // --- Permanent "Always-On" Ambient Sconce Lights (4 per floor) ---
+    // Placed at the extreme edges of the LOT_WIDTH and LOT_DEPTH for ground, floor 1, and floor 2
+    for (int f = 0; f <= 2; ++f) { // f=0=ground, f=1=floor1, f=2=floor2
+        float fY = f * FLOOR_TO_FLOOR_HEIGHT;
+        float sH = fY + 3.0f; // Sconce height
+        
+        glm::vec3 corners[4] = {
+            glm::vec3(5.0f, sH, 5.0f),
+            glm::vec3(LOT_WIDTH - 5.0f, sH, 5.0f),
+            glm::vec3(5.0f, sH, LOT_DEPTH - 5.0f),
+            glm::vec3(LOT_WIDTH - 5.0f, sH, LOT_DEPTH - 5.0f)
+        };
+        
+        for (int c = 0; c < 4 && lightIdx < 32; ++c) {
+            std::string base = "pointLights[" + std::to_string(lightIdx) + "]";
+            shader.setVec3(base + ".position", corners[c]);
+            shader.setVec3(base + ".ambient", glm::vec3(0.08f, 0.06f, 0.04f));
+            shader.setVec3(base + ".diffuse", glm::vec3(0.40f, 0.35f, 0.25f));
+            shader.setVec3(base + ".specular", glm::vec3(0.3f, 0.3f, 0.25f));
+            lightIdx++;
+        }
+    }
 
     // --- Ceiling Lights (Key 2): ground floor + first floor ---
     if (ceilingLightsOn) {
@@ -2763,7 +2795,7 @@ void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsig
     drawOutdoorEnvironment(shader, cubeVAO, quadVAO, cylVAO);
 
     // Draw additional empty floors stacked above ground floor
-    drawStackedEmptyFloors(shader, cubeVAO, quadVAO);
+    drawStackedEmptyFloors(shader, cubeVAO, quadVAO, sphereVAO, sphereCount);
 
     // Draw the parking lot
     drawParkingLot(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
