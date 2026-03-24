@@ -10,6 +10,7 @@
 #include "car_generator.h"
 #include "human_generator.h"
 #include "escalator.h"
+#include "first_floor_layout.h"
 
 #include <iostream>
 #include <vector>
@@ -55,7 +56,8 @@ void drawStopStencil(Shader& shader, unsigned int cubeVAO, glm::vec3 position, f
 void drawDirectionalArrow(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float rotation);
 void drawSpeedBump(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float width);
 void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO);
-void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO);
+void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO,
+               unsigned int coneVAO, int coneCount, unsigned int sphereVAO, int sphereCount);
 void setFancyWindowContext(Shader& shader, unsigned int cubeVAO);
 void setFancyWindowYaw(float yawDeg);
 void drawFancyWindow(glm::vec3 position);
@@ -78,7 +80,7 @@ unsigned int SCR_HEIGHT = 900;
 // Parking lot dimensions (meters)
 const float LOT_WIDTH = 140.0f;
 const float LOT_DEPTH = 100.0f;
-const float CEILING_HEIGHT = 5.0f;
+const float CEILING_HEIGHT = 6.2f;
 const float WALL_THICKNESS = 0.3f;
 const float PILLAR_SIZE = 0.5f;
 const float SPOT_WIDTH = 2.5f;
@@ -86,7 +88,7 @@ const float SPOT_DEPTH = 5.0f;
 const float LANE_WIDTH = 6.0f;
 const int EXTRA_FLOORS = 5;
 const int TOP_FLOOR_INDEX = 5;
-const float FLOOR_TO_FLOOR_HEIGHT = 6.5f;
+const float FLOOR_TO_FLOOR_HEIGHT = 8.0f;
 
 // Camera - starts in front of the outdoor escalator at pedestrian height
 BasicCamera camera(LOT_WIDTH + 34.0f, 1.7f, LOT_DEPTH * 0.78f - 1.45f);
@@ -426,7 +428,7 @@ int main()
             shader.setMat4("projection", projection);
             shader.setMat4("view", view1);
             shader.setVec3("viewPos", camPos1);
-            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO, coneVAO, coneCount, sphereVAO, sphereCount);
             drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
             drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
 
@@ -437,7 +439,7 @@ int main()
             shader.setMat4("projection", projection);
             shader.setMat4("view", view2);
             shader.setVec3("viewPos", camPos2);
-            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO, coneVAO, coneCount, sphereVAO, sphereCount);
             drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
             drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
 
@@ -448,7 +450,7 @@ int main()
             shader.setMat4("projection", projection);
             shader.setMat4("view", view3);
             shader.setVec3("viewPos", camPos3);
-            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO, coneVAO, coneCount, sphereVAO, sphereCount);
             drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
             drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
 
@@ -459,7 +461,7 @@ int main()
             shader.setMat4("projection", projectionInteractive);
             shader.setMat4("view", viewInteractive);
             shader.setVec3("viewPos", camera.Position);
-            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO, coneVAO, coneCount, sphereVAO, sphereCount);
             drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
             drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
         } else {
@@ -471,7 +473,7 @@ int main()
             shader.setMat4("projection", projectionFullscreen);
             shader.setMat4("view", viewFullscreen);
             shader.setVec3("viewPos", camera.Position);
-            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
+            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO, coneVAO, coneCount, sphereVAO, sphereCount);
             drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
             drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
         }
@@ -1305,6 +1307,101 @@ void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int q
 
     shader.setInt("useTexture", 0);
 
+    const float windowCutW = 2.2f;
+    const float windowCutH = 2.0f;
+    const float sideZs[3] = { LOT_DEPTH * 0.22f, LOT_DEPTH * 0.50f, LOT_DEPTH * 0.78f };
+    const float backXs[4] = { LOT_WIDTH * 0.14f, LOT_WIDTH * 0.34f, LOT_WIDTH * 0.58f, LOT_WIDTH * 0.82f };
+
+    auto drawBackWallWithOpenings = [&](float floorY, float ceilingY, float windowY) {
+        float wallHeight = ceilingY - floorY;
+        float wallCenterY = 0.5f * (floorY + ceilingY);
+        float holeBottom = windowY - windowCutH * 0.5f;
+        float holeTop = windowY + windowCutH * 0.5f;
+
+        float bottomH = std::max(0.0f, holeBottom - floorY);
+        if (bottomH > 0.001f) {
+            drawCube(shader, cubeVAO,
+                     glm::vec3(LOT_WIDTH * 0.5f, floorY + bottomH * 0.5f, -WALL_THICKNESS * 0.5f),
+                     glm::vec3(LOT_WIDTH, bottomH, WALL_THICKNESS),
+                     wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+        }
+
+        float topH = std::max(0.0f, ceilingY - holeTop);
+        if (topH > 0.001f) {
+            drawCube(shader, cubeVAO,
+                     glm::vec3(LOT_WIDTH * 0.5f, holeTop + topH * 0.5f, -WALL_THICKNESS * 0.5f),
+                     glm::vec3(LOT_WIDTH, topH, WALL_THICKNESS),
+                     wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+        }
+
+        float midH = std::max(0.0f, std::min(ceilingY, holeTop) - std::max(floorY, holeBottom));
+        if (midH > 0.001f) {
+            float prev = 0.0f;
+            for (int i = 0; i < 4; ++i) {
+                float left = backXs[i] - windowCutW * 0.5f;
+                float seg = left - prev;
+                if (seg > 0.001f) {
+                    drawCube(shader, cubeVAO,
+                             glm::vec3(prev + seg * 0.5f, windowY, -WALL_THICKNESS * 0.5f),
+                             glm::vec3(seg, midH, WALL_THICKNESS),
+                             wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+                }
+                prev = backXs[i] + windowCutW * 0.5f;
+            }
+            float tail = LOT_WIDTH - prev;
+            if (tail > 0.001f) {
+                drawCube(shader, cubeVAO,
+                         glm::vec3(prev + tail * 0.5f, windowY, -WALL_THICKNESS * 0.5f),
+                         glm::vec3(tail, midH, WALL_THICKNESS),
+                         wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+            }
+        }
+    };
+
+    auto drawSideWallWithOpenings = [&](float wallX, float floorY, float ceilingY, float windowY) {
+        float holeBottom = windowY - windowCutH * 0.5f;
+        float holeTop = windowY + windowCutH * 0.5f;
+
+        float bottomH = std::max(0.0f, holeBottom - floorY);
+        if (bottomH > 0.001f) {
+            drawCube(shader, cubeVAO,
+                     glm::vec3(wallX, floorY + bottomH * 0.5f, LOT_DEPTH * 0.5f),
+                     glm::vec3(WALL_THICKNESS, bottomH, LOT_DEPTH),
+                     wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+        }
+
+        float topH = std::max(0.0f, ceilingY - holeTop);
+        if (topH > 0.001f) {
+            drawCube(shader, cubeVAO,
+                     glm::vec3(wallX, holeTop + topH * 0.5f, LOT_DEPTH * 0.5f),
+                     glm::vec3(WALL_THICKNESS, topH, LOT_DEPTH),
+                     wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+        }
+
+        float midH = std::max(0.0f, std::min(ceilingY, holeTop) - std::max(floorY, holeBottom));
+        if (midH > 0.001f) {
+            float prev = 0.0f;
+            for (int i = 0; i < 3; ++i) {
+                float left = sideZs[i] - windowCutW * 0.5f;
+                float seg = left - prev;
+                if (seg > 0.001f) {
+                    drawCube(shader, cubeVAO,
+                             glm::vec3(wallX, windowY, prev + seg * 0.5f),
+                             glm::vec3(WALL_THICKNESS, midH, seg),
+                             wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+                }
+                prev = sideZs[i] + windowCutW * 0.5f;
+            }
+            float tail = LOT_DEPTH - prev;
+            if (tail > 0.001f) {
+                drawCube(shader, cubeVAO,
+                         glm::vec3(wallX, windowY, prev + tail * 0.5f),
+                         glm::vec3(WALL_THICKNESS, midH, tail),
+                         wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+            }
+        }
+    };
+
     for (int floor = 1; floor <= EXTRA_FLOORS; ++floor) {
         float floorY = floor * FLOOR_TO_FLOOR_HEIGHT;
         float ceilingY = floorY + FLOOR_TO_FLOOR_HEIGHT;
@@ -1318,12 +1415,12 @@ void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int q
                             elevator.shaftCenter.x, elevator.shaftCenter.z,
                             shaftOpeningW, shaftOpeningD, false);
 
-        drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH / 2.0f, wallCenterY, -WALL_THICKNESS / 2.0f),
-                 glm::vec3(LOT_WIDTH, wallHeight, WALL_THICKNESS), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+        float windowY = floorY + wallHeight * 0.58f;
+        drawBackWallWithOpenings(floorY, ceilingY, windowY);
+
         drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH / 2.0f, wallCenterY, LOT_DEPTH + WALL_THICKNESS / 2.0f),
                  glm::vec3(LOT_WIDTH, wallHeight, WALL_THICKNESS), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
-        drawCube(shader, cubeVAO, glm::vec3(-WALL_THICKNESS / 2.0f, wallCenterY, LOT_DEPTH / 2.0f),
-                 glm::vec3(WALL_THICKNESS, wallHeight, LOT_DEPTH), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+        drawSideWallWithOpenings(-WALL_THICKNESS * 0.5f, floorY, ceilingY, windowY);
 
         // First floor: make a real side opening behind the glass gate for entry.
         if (floor == 1) {
@@ -1343,14 +1440,10 @@ void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int q
                          wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
             }
         } else {
-            drawCube(shader, cubeVAO, glm::vec3(LOT_WIDTH + WALL_THICKNESS / 2.0f, wallCenterY, LOT_DEPTH / 2.0f),
-                     glm::vec3(WALL_THICKNESS, wallHeight, LOT_DEPTH), wallColor, 0, 0.1f, 0.55f, 0.18f, 14.0f);
+            drawSideWallWithOpenings(LOT_WIDTH + WALL_THICKNESS * 0.5f, floorY, ceilingY, windowY);
         }
 
         // Window placement at fixed intervals (skip floor 1 right side where gate opening exists)
-        float windowY = floorY + wallHeight * 0.58f;
-        float sideZs[3] = { LOT_DEPTH * 0.22f, LOT_DEPTH * 0.50f, LOT_DEPTH * 0.78f };
-        float backXs[4] = { LOT_WIDTH * 0.14f, LOT_WIDTH * 0.34f, LOT_WIDTH * 0.58f, LOT_WIDTH * 0.82f };
 
         // Left wall windows
         setFancyWindowYaw(90.0f);
@@ -1374,6 +1467,8 @@ void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int q
 
         // First-floor interior fixtures (same toggle keys as ground floor)
         if (floor == 1) {
+            FirstFloorDesign::drawFirstFloorLayout(floorY, ceilingY);
+
             // Ceiling lights (key 2)
             for (int i = 0; i < 4; ++i) {
                 for (int j = 0; j < 3; ++j) {
@@ -2657,9 +2752,12 @@ void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVA
 }
 
 // Helper function to draw the entire scene
-void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO) {
+void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO,
+               unsigned int coneVAO, int coneCount, unsigned int sphereVAO, int sphereCount) {
     // Reset texture mode to 0 (default starting state) for scene objects that shouldn't change
     shader.setInt("useTexture", 0);
+
+    FirstFloorDesign::setRenderContext(shader, cubeVAO, cylVAO, 16, coneVAO, coneCount, sphereVAO, sphereCount);
 
     // Draw outdoor environment first
     drawOutdoorEnvironment(shader, cubeVAO, quadVAO, cylVAO);
