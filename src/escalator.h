@@ -180,41 +180,197 @@ inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, uns
     drawQuad(shader, quadVAO, branchV,
              glm::vec3(0.22f, 0.22f, 0.24f), 0, 0.12f, 0.56f, 0.2f, 20.0f);
 
+    // Detailed escalator proportions
+    float landingLen = 2.3f;
+    float inclineRun = std::max(2.5f, l.run - 2.0f * landingLen);
+    float inclineRise = l.rise;
+    float inclineLen = std::sqrt(inclineRun * inclineRun + inclineRise * inclineRise);
+    float inclineAngle = glm::degrees(std::atan2(inclineRise, inclineRun));
+
+    float xBottomFlatCenter = l.baseX - landingLen * 0.5f;
+    float xBottomToIncline = l.baseX - landingLen;
+    float xTopFromIncline = l.topX + landingLen;
+    float xTopFlatCenter = l.topX + landingLen * 0.5f;
+
+    auto drawHandrailLoop = [&](float xCenter, float yCenter, float zPos, float radius, bool topLoop) {
+        const int segs = 14;
+        for (int i = 0; i < segs; ++i) {
+            float t0 = (float)i / (float)segs;
+            float t1 = (float)(i + 1) / (float)segs;
+
+            float a0 = topLoop ? glm::pi<float>() * t0 : glm::pi<float>() * (1.0f + t0);
+            float a1 = topLoop ? glm::pi<float>() * t1 : glm::pi<float>() * (1.0f + t1);
+
+            glm::vec3 p0(xCenter + std::cos(a0) * radius, yCenter + std::sin(a0) * radius, zPos);
+            glm::vec3 p1(xCenter + std::cos(a1) * radius, yCenter + std::sin(a1) * radius, zPos);
+
+            glm::vec3 mid = (p0 + p1) * 0.5f;
+            float segLen = glm::length(p1 - p0);
+            float segAngle = glm::degrees(std::atan2(p1.y - p0.y, p1.x - p0.x));
+
+            drawCubeRotated(shader, cubeVAO, mid,
+                            glm::vec3(segLen, 0.055f, 0.06f),
+                            glm::vec3(0.0f, 0.0f, segAngle),
+                            glm::vec3(0.08f, 0.08f, 0.09f), 3,
+                            0.05f, 0.35f, 0.95f, 180.0f);
+        }
+    };
+
     auto drawEscalatorLane = [&](float laneZ, bool upDirection) {
-        glm::vec3 rampPos(l.topX + l.run * 0.5f, l.rise * 0.5f, laneZ);
+        glm::vec3 metalSide(0.58f, 0.62f, 0.69f);
+        glm::vec3 combColor(0.22f, 0.24f, 0.26f);
+        float stepTravelY0 = 0.16f;
 
-        // Support + ramp are intentionally same tilt so they are not reversed.
-        drawCubeRotated(shader, cubeVAO, rampPos,
-                        glm::vec3(l.length, 0.38f, l.laneWidth),
-                        glm::vec3(0.0f, 0.0f, -l.angleDeg),
-                        glm::vec3(0.36f, 0.37f, 0.40f), 3, 0.08f, 0.48f, 0.55f, 64.0f);
+        // Metallic truss chassis (no solid wedge body)
+        glm::vec3 inclineCenter((xBottomToIncline + xTopFromIncline) * 0.5f,
+                                inclineRise * 0.5f,
+                                laneZ);
 
-        drawCubeRotated(shader, cubeVAO, rampPos + glm::vec3(0.0f, 0.55f, -l.laneWidth * 0.5f),
-                        glm::vec3(l.length, 1.1f, 0.07f),
-                        glm::vec3(0.0f, 0.0f, -l.angleDeg),
-                        glm::vec3(0.62f, 0.67f, 0.74f), 3, 0.08f, 0.42f, 0.75f, 96.0f);
-        drawCubeRotated(shader, cubeVAO, rampPos + glm::vec3(0.0f, 0.55f, l.laneWidth * 0.5f),
-                        glm::vec3(l.length, 1.1f, 0.07f),
-                        glm::vec3(0.0f, 0.0f, -l.angleDeg),
-                        glm::vec3(0.62f, 0.67f, 0.74f), 3, 0.08f, 0.42f, 0.75f, 96.0f);
+        drawCubeRotated(shader, cubeVAO, inclineCenter + glm::vec3(0.0f, -0.10f, -l.laneWidth * 0.48f),
+                        glm::vec3(inclineLen, 0.16f, 0.10f),
+                        glm::vec3(0.0f, 0.0f, -inclineAngle), metalSide, 3,
+                        0.06f, 0.45f, 0.95f, 180.0f);
+        drawCubeRotated(shader, cubeVAO, inclineCenter + glm::vec3(0.0f, -0.10f, l.laneWidth * 0.48f),
+                        glm::vec3(inclineLen, 0.16f, 0.10f),
+                        glm::vec3(0.0f, 0.0f, -inclineAngle), metalSide, 3,
+                        0.06f, 0.45f, 0.95f, 180.0f);
 
-        const int stepCount = 24;
-        float motion = std::fmod((float)glfwGetTime() * 0.45f, 1.0f);
-        glm::vec3 stepColor(0.55f, 0.58f, 0.62f);
-
-        for (int i = 0; i < stepCount; ++i) {
-            float u = (float)i / (float)stepCount;
-            float p = std::fmod(u + motion, 1.0f);
-            float s = upDirection ? p : (1.0f - p);
-
-            float x = l.baseX - s * l.run;
-            float y = s * l.rise + 0.20f;
-
+        for (int b = 0; b < 10; ++b) {
+            float u = (float)b / 9.0f;
+            float x = xBottomToIncline + u * (xTopFromIncline - xBottomToIncline);
+            float y = u * inclineRise - 0.10f;
             drawCubeRotated(shader, cubeVAO,
                             glm::vec3(x, y, laneZ),
-                            glm::vec3(0.58f, 0.12f, l.laneWidth - 0.30f),
-                            glm::vec3(0.0f, 0.0f, -l.angleDeg),
-                            stepColor, 6, 0.1f, 0.56f, 0.8f, 120.0f);
+                            glm::vec3(0.10f, 0.12f, l.laneWidth * 0.94f),
+                            glm::vec3(0.0f, 0.0f, -inclineAngle),
+                            glm::vec3(0.44f, 0.47f, 0.52f), 3,
+                            0.06f, 0.40f, 0.88f, 160.0f);
+        }
+
+        // Flat landing comb plates (bottom + top)
+        drawCube(shader, cubeVAO,
+                 glm::vec3(xBottomFlatCenter, stepTravelY0, laneZ),
+                 glm::vec3(landingLen, 0.06f, l.laneWidth - 0.25f),
+                 combColor, 3, 0.08f, 0.42f, 0.85f, 160.0f);
+        drawCube(shader, cubeVAO,
+                 glm::vec3(xTopFlatCenter, inclineRise + stepTravelY0, laneZ),
+                 glm::vec3(landingLen, 0.06f, l.laneWidth - 0.25f),
+                 combColor, 3, 0.08f, 0.42f, 0.85f, 160.0f);
+
+        // Newel (rounded end where handrail loops)
+        float newelRadius = 0.58f;
+        drawHandrailLoop(xBottomToIncline, 0.72f, laneZ - l.laneWidth * 0.5f, newelRadius, false);
+        drawHandrailLoop(xBottomToIncline, 0.72f, laneZ + l.laneWidth * 0.5f, newelRadius, false);
+        drawHandrailLoop(xTopFromIncline, inclineRise + 0.72f, laneZ - l.laneWidth * 0.5f, newelRadius, true);
+        drawHandrailLoop(xTopFromIncline, inclineRise + 0.72f, laneZ + l.laneWidth * 0.5f, newelRadius, true);
+
+        // Handrails (top run)
+        drawCube(shader, cubeVAO,
+                 glm::vec3(xBottomFlatCenter, 1.30f, laneZ - l.laneWidth * 0.5f),
+                 glm::vec3(landingLen, 0.055f, 0.06f),
+                 glm::vec3(0.08f, 0.08f, 0.09f), 3, 0.05f, 0.35f, 0.95f, 180.0f);
+        drawCube(shader, cubeVAO,
+                 glm::vec3(xBottomFlatCenter, 1.30f, laneZ + l.laneWidth * 0.5f),
+                 glm::vec3(landingLen, 0.055f, 0.06f),
+                 glm::vec3(0.08f, 0.08f, 0.09f), 3, 0.05f, 0.35f, 0.95f, 180.0f);
+
+        drawCubeRotated(shader, cubeVAO,
+                        inclineCenter + glm::vec3(0.0f, 1.30f - inclineRise * 0.5f, -l.laneWidth * 0.5f),
+                        glm::vec3(inclineLen, 0.055f, 0.06f),
+                        glm::vec3(0.0f, 0.0f, -inclineAngle),
+                        glm::vec3(0.08f, 0.08f, 0.09f), 3, 0.05f, 0.35f, 0.95f, 180.0f);
+        drawCubeRotated(shader, cubeVAO,
+                        inclineCenter + glm::vec3(0.0f, 1.30f - inclineRise * 0.5f, l.laneWidth * 0.5f),
+                        glm::vec3(inclineLen, 0.055f, 0.06f),
+                        glm::vec3(0.0f, 0.0f, -inclineAngle),
+                        glm::vec3(0.08f, 0.08f, 0.09f), 3, 0.05f, 0.35f, 0.95f, 180.0f);
+
+        drawCube(shader, cubeVAO,
+                 glm::vec3(xTopFlatCenter, inclineRise + 1.30f, laneZ - l.laneWidth * 0.5f),
+                 glm::vec3(landingLen, 0.055f, 0.06f),
+                 glm::vec3(0.08f, 0.08f, 0.09f), 3, 0.05f, 0.35f, 0.95f, 180.0f);
+        drawCube(shader, cubeVAO,
+                 glm::vec3(xTopFlatCenter, inclineRise + 1.30f, laneZ + l.laneWidth * 0.5f),
+                 glm::vec3(landingLen, 0.055f, 0.06f),
+                 glm::vec3(0.08f, 0.08f, 0.09f), 3, 0.05f, 0.35f, 0.95f, 180.0f);
+
+        // Glass balustrades (outside + inside lane boundary)
+        glm::vec3 glassColor(0.76f, 0.86f, 0.95f);
+        float glassH = 1.0f;
+
+        drawCubeAlpha(shader, cubeVAO,
+                      glm::vec3(xBottomFlatCenter, 0.78f, laneZ - l.laneWidth * 0.48f),
+                      glm::vec3(landingLen, glassH, 0.03f), glassColor,
+                      4, 0.05f, 0.14f, 1.0f, 220.0f, 0.22f);
+        drawCubeAlpha(shader, cubeVAO,
+                      glm::vec3(xBottomFlatCenter, 0.78f, laneZ + l.laneWidth * 0.48f),
+                      glm::vec3(landingLen, glassH, 0.03f), glassColor,
+                      4, 0.05f, 0.14f, 1.0f, 220.0f, 0.22f);
+
+        drawCubeRotated(shader, cubeVAO,
+                        inclineCenter + glm::vec3(0.0f, 0.78f - inclineRise * 0.5f, -l.laneWidth * 0.48f),
+                        glm::vec3(inclineLen, glassH, 0.03f),
+                        glm::vec3(0.0f, 0.0f, -inclineAngle), glassColor,
+                        4, 0.05f, 0.14f, 1.0f, 220.0f);
+        drawCubeRotated(shader, cubeVAO,
+                        inclineCenter + glm::vec3(0.0f, 0.78f - inclineRise * 0.5f, l.laneWidth * 0.48f),
+                        glm::vec3(inclineLen, glassH, 0.03f),
+                        glm::vec3(0.0f, 0.0f, -inclineAngle), glassColor,
+                        4, 0.05f, 0.14f, 1.0f, 220.0f);
+
+        drawCubeAlpha(shader, cubeVAO,
+                      glm::vec3(xTopFlatCenter, inclineRise + 0.78f, laneZ - l.laneWidth * 0.48f),
+                      glm::vec3(landingLen, glassH, 0.03f), glassColor,
+                      4, 0.05f, 0.14f, 1.0f, 220.0f, 0.22f);
+        drawCubeAlpha(shader, cubeVAO,
+                      glm::vec3(xTopFlatCenter, inclineRise + 0.78f, laneZ + l.laneWidth * 0.48f),
+                      glm::vec3(landingLen, glassH, 0.03f), glassColor,
+                      4, 0.05f, 0.14f, 1.0f, 220.0f, 0.22f);
+
+        // Animated right-angled step geometry (tread + riser)
+        const int stepCount = 34;
+        float motion = std::fmod((float)glfwGetTime() * 0.22f, 1.0f);
+        float loopLen = landingLen + inclineRun + landingLen + (landingLen + inclineRun + landingLen);
+        float visibleLen = landingLen + inclineRun + landingLen;
+
+        for (int i = 0; i < stepCount; ++i) {
+            float u = ((float)i / (float)stepCount + motion);
+            u = std::fmod(u, 1.0f);
+            float s = upDirection ? u : (1.0f - u);
+            float d = s * loopLen;
+
+            float x = xBottomFlatCenter;
+            float y = stepTravelY0;
+
+            if (d < landingLen) {
+                float t = d / landingLen;
+                x = l.baseX - t * landingLen;
+                y = stepTravelY0;
+            } else if (d < landingLen + inclineRun) {
+                float t = (d - landingLen) / inclineRun;
+                x = xBottomToIncline - t * inclineRun;
+                y = stepTravelY0 + t * inclineRise;
+            } else if (d < visibleLen) {
+                float t = (d - landingLen - inclineRun) / landingLen;
+                x = xTopFromIncline - t * landingLen;
+                y = stepTravelY0 + inclineRise;
+            } else {
+                continue;
+            }
+
+            // Tread (horizontal)
+            drawCube(shader, cubeVAO,
+                     glm::vec3(x, y, laneZ),
+                     glm::vec3(0.62f, 0.08f, l.laneWidth - 0.34f),
+                     glm::vec3(0.14f, 0.14f, 0.15f), 7,
+                     0.08f, 0.52f, 0.35f, 48.0f);
+
+            // Riser (vertical face behind tread => 90-degree right angle)
+            drawCube(shader, cubeVAO,
+                     glm::vec3(x + 0.26f, y - 0.06f, laneZ),
+                     glm::vec3(0.05f, 0.12f, l.laneWidth - 0.34f),
+                     glm::vec3(0.12f, 0.12f, 0.13f), 7,
+                     0.08f, 0.45f, 0.25f, 36.0f);
         }
     };
 

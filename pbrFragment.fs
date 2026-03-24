@@ -67,7 +67,7 @@ uniform sampler2D texture2;    // container
 uniform int useTexture;
 
 // Procedural texture type (used when useTexture == 0)
-// 0=concrete, 1=painted line, 2=car paint, 3=metal, 5=mirror, 6=elevator cable
+// 0=concrete, 1=painted line, 2=car paint, 3=metal, 5=mirror, 6=elevator cable, 7=ribbed step
 uniform int textureType;
 
 
@@ -223,6 +223,18 @@ vec3 proceduralElevatorCable(vec3 worldPos, vec3 baseColor) {
     return clamp(shaded, 0.0, 1.0);
 }
 
+vec3 proceduralRibbedStep(vec3 worldPos, vec3 baseColor) {
+    float rib = abs(sin(worldPos.x * 140.0));
+    float groove = smoothstep(0.0, 0.35, rib);
+    vec3 dark = baseColor * 0.55;
+    vec3 light = baseColor * 1.05;
+    vec3 stepped = mix(dark, light, groove);
+
+    float grain = fract(sin(dot(floor(worldPos * 420.0), vec3(9.3, 17.1, 31.7))) * 43758.5453);
+    stepped += vec3((grain - 0.5) * 0.03);
+    return clamp(stepped, 0.0, 1.0);
+}
+
 // ============================================================
 // Main
 // ============================================================
@@ -281,6 +293,7 @@ void main()
         else if (textureType == 3) baseColor = proceduralMetal(procUV, objectColor);
         else if (textureType == 5) baseColor = proceduralMirror(objectColor, viewDir, norm);
         else if (textureType == 6) baseColor = proceduralElevatorCable(FragPos, objectColor);
+        else if (textureType == 7) baseColor = proceduralRibbedStep(FragPos, objectColor);
     }
     
     // --------------------------------------------------------
