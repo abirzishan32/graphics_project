@@ -21,10 +21,11 @@ namespace SecondFloorDesign {
 struct RenderContext {
     Shader* shader = nullptr;
     unsigned int cubeVAO = 0;
-    int cylSegments = 16;
+    unsigned int cylVAO = 0;
     unsigned int sphereVAO = 0;
     int sphereCount = 0;
     unsigned int texSofa = 0;
+    unsigned int texBillboard = 0;
 };
 
 inline RenderContext& ctx() {
@@ -34,17 +35,19 @@ inline RenderContext& ctx() {
 
 inline void setRenderContext(Shader& shader,
                              unsigned int cubeVAO,
-                             int cylSegments,
+                             unsigned int cylVAO,
                              unsigned int sphereVAO,
                              int sphereCount,
-                             unsigned int texSofa) {
+                             unsigned int texSofa,
+                             unsigned int texBillboard) {
     RenderContext& c = ctx();
     c.shader = &shader;
     c.cubeVAO = cubeVAO;
-    c.cylSegments = cylSegments;
+    c.cylVAO = cylVAO;
     c.sphereVAO = sphereVAO;
     c.sphereCount = sphereCount;
     c.texSofa = texSofa;
+    c.texBillboard = texBillboard;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -207,6 +210,132 @@ inline unsigned int createPleatedCurtainVAO(int& outVertexCount) {
     return VAO;
 }
 
+inline unsigned int createPopcornBoxVAO(int& outVertexCount) {
+    float b = 0.4f; // bottom half-width
+    float t = 0.55f; // top half-width
+    float h = 1.2f; // total height
+    
+    // Front Face (Z = front)
+    glm::vec3 nF(0.0f, h, t - b);
+    nF = glm::normalize(nF);
+    
+    // Back Face (Z = back)
+    glm::vec3 nB(0.0f, h, -(t - b));
+    nB = glm::normalize(nB);
+    
+    // Right Face (X = right)
+    glm::vec3 nR(h, -(t - b), 0.0f);
+    nR = glm::normalize(nR);
+    
+    // Left Face (X = left)
+    glm::vec3 nL(-h, -(t - b), 0.0f);
+    nL = glm::normalize(nL);
+    
+    float verts[] = {
+        // Front face
+        -b, 0.0f,  b, nF.x, nF.y, nF.z, 0.0f, 0.0f,
+         b, 0.0f,  b, nF.x, nF.y, nF.z, 1.0f, 0.0f,
+         t,  h,   t, nF.x, nF.y, nF.z, 1.0f, 1.0f,
+         t,  h,   t, nF.x, nF.y, nF.z, 1.0f, 1.0f,
+        -t,  h,   t, nF.x, nF.y, nF.z, 0.0f, 1.0f,
+        -b, 0.0f,  b, nF.x, nF.y, nF.z, 0.0f, 0.0f,
+        // Back face
+        -b, 0.0f, -b, nB.x, nB.y, nB.z, 1.0f, 0.0f,
+        -t,  h,  -t, nB.x, nB.y, nB.z, 1.0f, 1.0f,
+         t,  h,  -t, nB.x, nB.y, nB.z, 0.0f, 1.0f,
+         t,  h,  -t, nB.x, nB.y, nB.z, 0.0f, 1.0f,
+         b, 0.0f, -b, nB.x, nB.y, nB.z, 0.0f, 0.0f,
+        -b, 0.0f, -b, nB.x, nB.y, nB.z, 1.0f, 0.0f,
+        // Left face
+        -b, 0.0f, -b, nL.x, nL.y, nL.z, 0.0f, 0.0f,
+        -b, 0.0f,  b, nL.x, nL.y, nL.z, 1.0f, 0.0f,
+        -t,  h,   t, nL.x, nL.y, nL.z, 1.0f, 1.0f,
+        -t,  h,   t, nL.x, nL.y, nL.z, 1.0f, 1.0f,
+        -t,  h,  -t, nL.x, nL.y, nL.z, 0.0f, 1.0f,
+        -b, 0.0f, -b, nL.x, nL.y, nL.z, 0.0f, 0.0f,
+        // Right face
+         b, 0.0f, -b, nR.x, nR.y, nR.z, 1.0f, 0.0f,
+         t,  h,  -t, nR.x, nR.y, nR.z, 1.0f, 1.0f,
+         t,  h,   t, nR.x, nR.y, nR.z, 0.0f, 1.0f,
+         t,  h,   t, nR.x, nR.y, nR.z, 0.0f, 1.0f,
+         b, 0.0f,  b, nR.x, nR.y, nR.z, 0.0f, 0.0f,
+         b, 0.0f, -b, nR.x, nR.y, nR.z, 1.0f, 0.0f,
+        // Bottom face
+        -b, 0.0f, -b, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f,
+         b, 0.0f, -b, 0.0f, -1.0f, 0.0f, 1.0f, 1.0f,
+         b, 0.0f,  b, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+         b, 0.0f,  b, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+        -b, 0.0f,  b, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+        -b, 0.0f, -b, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f,
+        // Top face (open box) - inner floor to drop popcorn inside
+        -t, h - 0.2f, -t, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+        -t, h - 0.2f,  t, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+         t, h - 0.2f,  t, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+         t, h - 0.2f,  t, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+         t, h - 0.2f, -t, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+        -t, h - 0.2f, -t, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f
+    };
+    
+    outVertexCount = 36;
+    unsigned int VAO, VBO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3*sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6*sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glBindVertexArray(0);
+    return VAO;
+}
+
+inline void drawPopcornBoxHelper(glm::vec3 pos) {
+    RenderContext& c = ctx();
+    if (!c.shader || c.sphereVAO == 0) return;
+    Shader& shader = *c.shader;
+    
+    static unsigned int pboxVAO = 0;
+    static int pboxVerts = 0;
+    if (pboxVAO == 0) pboxVAO = createPopcornBoxVAO(pboxVerts);
+    
+    glm::vec3 stripeColor(0.8f, 0.1f, 0.1f);
+    
+    // Draw rigid box
+    glm::mat4 m = glm::mat4(1.0f);
+    m = glm::translate(m, pos);
+    m = glm::scale(m, glm::vec3(0.3f)); // scale down
+    shader.setMat4("model", m);
+    shader.setVec3("objectColor", stripeColor);
+    shader.setInt("textureType", 0);
+    shader.setFloat("ambientStrength", 0.3f);
+    shader.setFloat("diffuseStrength", 0.6f);
+    shader.setFloat("specularStrength", 0.1f);
+    shader.setFloat("shininess", 2.0f);
+    glBindVertexArray(pboxVAO);
+    glDrawArrays(GL_TRIANGLES, 0, pboxVerts);
+    
+    // Draw overlapping popcorn spheres on top rim
+    glm::vec3 pcColor(0.95f, 0.85f, 0.3f);
+    float boxH = 0.3f * 1.2f;
+    for (int i = 0; i < 12; ++i) {
+        float ox = ((rand() % 100) / 100.0f - 0.5f) * 0.18f;
+        float oz = ((rand() % 100) / 100.0f - 0.5f) * 0.18f;
+        float oy = ((rand() % 100) / 100.0f) * 0.05f;
+        
+        glm::mat4 sm = glm::mat4(1.0f);
+        sm = glm::translate(sm, pos + glm::vec3(ox, boxH - 0.05f + oy, oz));
+        sm = glm::scale(sm, glm::vec3(0.04f));
+        shader.setMat4("model", sm);
+        shader.setVec3("objectColor", pcColor);
+        glBindVertexArray(c.sphereVAO);
+        glDrawElements(GL_TRIANGLES, c.sphereCount, GL_UNSIGNED_INT, 0);
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PROCEDURAL VIP RECLINER CHAIR
 // ─────────────────────────────────────────────────────────────────────────────
@@ -287,6 +416,276 @@ inline void drawCinemaChair(glm::vec3 position, float rotationDeg) {
     glm::vec3 cupR = armR + rotY(0.0f, 0.25f) + glm::vec3(0.0f, 0.08f, 0.0f);
     drawCubeRotated(shader, c.cubeVAO, cupL, glm::vec3(0.08f, 0.015f, 0.08f), glm::vec3(0, rotationDeg, 0), cupHolderGlow, 1, 0.9f, 0.2f, 0.0f, 1.0f);
     drawCubeRotated(shader, c.cubeVAO, cupR, glm::vec3(0.08f, 0.015f, 0.08f), glm::vec3(0, rotationDeg, 0), cupHolderGlow, 1, 0.9f, 0.2f, 0.0f, 1.0f);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROCEDURAL NPC SYSTEM (HIERARCHICAL)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum class NPCState { WANDERING, IN_LINE, TAKING_PICTURE, SELLING };
+
+struct NPC {
+    glm::vec3 position;
+    glm::vec3 targetPosition;
+    float rotationY;
+    float speed;
+    float walkCycleTime;
+    NPCState state;
+    float flashTimer;
+    float waitTimer;
+};
+
+static std::vector<NPC> npcs;
+
+inline void initNPCs(float floorY) {
+    if (!npcs.empty()) return;
+    
+    // 5 Wanderers in the lobby
+    for (int i = 0; i < 5; ++i) {
+        NPC n;
+        n.position = glm::vec3(20.0f + (rand() % 100), floorY, 73.0f + (rand() % 20));
+        n.targetPosition = glm::vec3(20.0f + (rand() % 100), floorY, 73.0f + (rand() % 20));
+        n.rotationY = 0.0f;
+        n.speed = 1.0f + ((rand() % 100) / 200.0f); // 1.0 to 1.5
+        n.walkCycleTime = (rand() % 100) / 10.0f;
+        n.state = NPCState::WANDERING;
+        n.flashTimer = 0.0f;
+        n.waitTimer = 0.0f;
+        npcs.push_back(n);
+    }
+    
+    // 4 people in line for concession (Queue)
+    for (int i = 0; i < 4; ++i) {
+        NPC n;
+        n.position = glm::vec3(30.0f, floorY, 84.0f + i * 2.0f);
+        n.targetPosition = n.position;
+        n.rotationY = 180.0f; // Face -Z (towards counter)
+        n.speed = 0.0f;
+        n.walkCycleTime = 0.0f;
+        n.state = NPCState::IN_LINE;
+        n.flashTimer = 0.0f;
+        n.waitTimer = 0.0f;
+        npcs.push_back(n);
+    }
+    
+    // 2 People taking pictures at billboards
+    for (int i = 0; i < 2; ++i) {
+        NPC n;
+        n.position = glm::vec3(45.0f + i * 50.0f, floorY, 78.0f); 
+        n.targetPosition = n.position;
+        n.rotationY = 180.0f; // Look back at billboard
+        n.speed = 0.0f;
+        n.walkCycleTime = 0.0f;
+        n.state = NPCState::TAKING_PICTURE;
+        n.flashTimer = (rand() % 500) / 100.0f;
+        n.waitTimer = 0.0f;
+        npcs.push_back(n);
+    }
+    
+    // 1 Concession Salesman behind the counter
+    NPC salesman;
+    salesman.position = glm::vec3(30.0f, floorY, 78.5f); // Inside the counter bounds
+    salesman.targetPosition = salesman.position;
+    salesman.rotationY = 0.0f; // Face +Z (towards customers)
+    salesman.speed = 0.0f;
+    salesman.walkCycleTime = 0.0f; 
+    salesman.state = NPCState::SELLING;
+    salesman.flashTimer = 0.0f;
+    salesman.waitTimer = 0.0f;
+    npcs.push_back(salesman);
+}
+
+inline void updateNPCs(float deltaTime, float floorY) {
+    if (npcs.empty()) {
+        initNPCs(floorY);
+    }
+    
+    for (auto& n : npcs) {
+        if (n.state == NPCState::WANDERING) {
+            if (n.waitTimer > 0.0f) {
+                n.waitTimer -= deltaTime;
+                n.walkCycleTime = 0.0f;
+            } else {
+                glm::vec3 dir = n.targetPosition - n.position;
+                dir.y = 0.0f;
+                float dist = glm::length(dir);
+                if (dist < 0.2f) {
+                    n.waitTimer = 1.0f + (rand() % 300) / 100.0f;
+                    n.targetPosition = glm::vec3(20.0f + (rand() % 100), floorY, 73.0f + (rand() % 20));
+                } else {
+                    dir = glm::normalize(dir);
+                    n.position += dir * n.speed * deltaTime;
+                    n.rotationY = glm::degrees(atan2(dir.x, dir.z));
+                    n.walkCycleTime += deltaTime * n.speed * 4.0f;
+                }
+            }
+        } else if (n.state == NPCState::TAKING_PICTURE) {
+            n.flashTimer -= deltaTime;
+            if (n.flashTimer <= 0.0f) {
+                n.flashTimer = 3.0f + (rand() % 400) / 100.0f; // Flash every 3-7 seconds
+            }
+        } else if (n.state == NPCState::SELLING) {
+            // Keep the salesman's sine-wave running to animate scooping arms
+            n.walkCycleTime += deltaTime * 5.0f; 
+        }
+    }
+}
+
+inline void drawProceduralNPC(glm::vec3 position, float rotationY, float cycle, float flashPhase, NPCState state) {
+    RenderContext& c = ctx();
+    if (!c.shader || c.cubeVAO == 0 || c.cylVAO == 0 || c.sphereVAO == 0) return;
+    Shader& shader = *c.shader;
+    
+    glm::vec3 skinColor(0.85f, 0.65f, 0.5f);
+    glm::vec3 shirtColor(0.2f, 0.4f, 0.7f);
+    glm::vec3 pantsColor(0.1f, 0.1f, 0.15f);
+    glm::vec3 shoeColor(0.05f, 0.05f, 0.05f);
+    
+    // Adjust colors for salesman
+    if (state == NPCState::SELLING) {
+        shirtColor = glm::vec3(0.9f, 0.1f, 0.1f);   // Red uniform uniform
+        pantsColor = glm::vec3(0.9f, 0.9f, 0.9f);   // White pants
+    }
+    
+    // Root transformation (Position and Yaw)
+    glm::mat4 root = glm::mat4(1.0f);
+    root = glm::translate(root, position);
+    root = glm::rotate(root, glm::radians(rotationY), glm::vec3(0.0f, 1.0f, 0.0f));
+    
+    // Mathematical swing logic
+    float swing = std::sin(cycle); 
+    float swingCos = std::cos(cycle); // For bouncy walk vertically
+    
+    float hipL = swing * 30.0f;
+    float hipR = -swing * 30.0f;
+    float kneeL = std::max(0.0f, -swing) * 40.0f;
+    float kneeR = std::max(0.0f, swing) * 40.0f;
+    
+    float shoulderL = -swing * 25.0f;
+    float shoulderR = swing * 25.0f;
+    float elbowL = std::max(0.0f, -swing) * 20.0f + 5.0f;
+    float elbowR = std::max(0.0f, swing) * 20.0f + 5.0f;
+    
+    float pelvicBounce = (state == NPCState::WANDERING) ? std::abs(swingCos) * 0.05f : 0.0f;
+
+    // Special animation overrides for the Salesman (Scooping)
+    if (state == NPCState::SELLING) {
+        hipL = 0; hipR = 0; kneeL = 0; kneeR = 0; pelvicBounce = 0;
+        shoulderL = 10.0f + std::sin(cycle * 0.5f) * 15.0f; // Continuous sweeping
+        shoulderR = 25.0f + std::cos(cycle) * 20.0f;        // Sharp scooping
+        elbowL = 40.0f + std::sin(cycle * 0.5f) * 5.0f;
+        elbowR = 30.0f + std::cos(cycle) * 10.0f;
+    }
+
+    // --- 1. PELVIS (Anchor point for legs and spine) ---
+    float pelvisY = 0.9f + pelvicBounce;
+    glm::mat4 pelvisM = glm::translate(root, glm::vec3(0.0f, pelvisY, 0.0f));
+    
+    // --- 2. LOWER LIMBS (Thigh -> Calf -> Shoe) ---
+    auto drawLeg = [&](int side, float hipFlex, float kneeFlex) {
+        float dirMultiplier = (side == 0) ? -1.0f : 1.0f; // Left=0, Right=1
+        
+        // Thigh
+        glm::mat4 thighM = glm::translate(pelvisM, glm::vec3(0.12f * dirMultiplier, -0.05f, 0.0f)); 
+        thighM = glm::rotate(thighM, glm::radians(hipFlex), glm::vec3(1.0f, 0.0f, 0.0f));
+        glm::mat4 drawThigh = glm::translate(thighM, glm::vec3(0.0f, -0.2f, 0.0f)); // Draw relative to pivot
+        drawThigh = glm::scale(drawThigh, glm::vec3(0.16f, 0.4f, 0.16f));
+        shader.setMat4("model", drawThigh);
+        shader.setVec3("objectColor", pantsColor);
+        glBindVertexArray(c.cylVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+        
+        // Calf
+        glm::mat4 calfM = glm::translate(thighM, glm::vec3(0.0f, -0.4f, 0.0f));
+        calfM = glm::rotate(calfM, glm::radians(kneeFlex), glm::vec3(1.0f, 0.0f, 0.0f)); // Knee rotates backwards (+X)
+        glm::mat4 drawCalf = glm::translate(calfM, glm::vec3(0.0f, -0.2f, 0.0f));
+        drawCalf = glm::scale(drawCalf, glm::vec3(0.12f, 0.4f, 0.12f));
+        shader.setMat4("model", drawCalf);
+        glBindVertexArray(c.cylVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+        
+        // Shoe
+        glm::mat4 shoeM = glm::translate(calfM, glm::vec3(0.0f, -0.42f, 0.06f));
+        shoeM = glm::scale(shoeM, glm::vec3(0.14f, 0.08f, 0.25f));
+        shader.setMat4("model", shoeM);
+        shader.setVec3("objectColor", shoeColor);
+        glBindVertexArray(c.cubeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    };
+    drawLeg(0, hipL, kneeL); // Left leg
+    drawLeg(1, hipR, kneeR); // Right leg
+    
+    // --- 3. UPPER TORSO (Spine -> Chest) ---
+    glm::mat4 torsoM = glm::translate(pelvisM, glm::vec3(0.0f, 0.0f, 0.0f));
+    // Optional spinal twist opposite to pelvis would go here
+    glm::mat4 drawTorso = glm::translate(torsoM, glm::vec3(0.0f, 0.35f, 0.0f));
+    drawTorso = glm::scale(drawTorso, glm::vec3(0.35f, 0.7f, 0.2f));
+    shader.setMat4("model", drawTorso);
+    shader.setVec3("objectColor", shirtColor);
+    glBindVertexArray(c.cubeVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    
+    // --- 4. UPPER LIMBS (Shoulder -> Upper Arm -> Lower Arm -> Hand) ---
+    auto drawArm = [&](int side, float shoulderFlex, float elbowFlex) {
+        float dirMultiplier = (side == 0) ? -1.0f : 1.0f; 
+        
+        // Upper Arm
+        glm::mat4 uArmM = glm::translate(torsoM, glm::vec3(0.24f * dirMultiplier, 0.6f, 0.0f)); // Shoulder pivot
+        uArmM = glm::rotate(uArmM, glm::radians(shoulderFlex), glm::vec3(1.0f, 0.0f, 0.0f));
+        glm::mat4 drawUArm = glm::translate(uArmM, glm::vec3(0.0f, -0.15f, 0.0f)); 
+        drawUArm = glm::scale(drawUArm, glm::vec3(0.12f, 0.3f, 0.12f));
+        shader.setMat4("model", drawUArm);
+        shader.setVec3("objectColor", shirtColor); // Sleeve
+        glBindVertexArray(c.cylVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+        
+        // Lower Arm
+        glm::mat4 lArmM = glm::translate(uArmM, glm::vec3(0.0f, -0.3f, 0.0f)); // Elbow pivot
+        lArmM = glm::rotate(lArmM, glm::radians(-elbowFlex), glm::vec3(1.0f, 0.0f, 0.0f)); // Elbow rotates forward (-X)
+        glm::mat4 drawLArm = glm::translate(lArmM, glm::vec3(0.0f, -0.15f, 0.0f));
+        drawLArm = glm::scale(drawLArm, glm::vec3(0.1f, 0.3f, 0.1f));
+        shader.setMat4("model", drawLArm);
+        shader.setVec3("objectColor", skinColor);
+        glBindVertexArray(c.cylVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+        
+        // Hand
+        glm::mat4 handM = glm::translate(lArmM, glm::vec3(0.0f, -0.35f, 0.0f));
+        handM = glm::scale(handM, glm::vec3(0.08f, 0.12f, 0.12f));
+        shader.setMat4("model", handM);
+        shader.setVec3("objectColor", skinColor);
+        glBindVertexArray(c.sphereVAO);
+        glDrawElements(GL_TRIANGLES, c.sphereCount, GL_UNSIGNED_INT, 0);
+    };
+    drawArm(0, shoulderL, elbowL); // Left arm
+    drawArm(1, shoulderR, elbowR); // Right arm
+    
+    // --- 5. HEAD and NECK ---
+    // Neck
+    glm::mat4 neckM = glm::translate(torsoM, glm::vec3(0.0f, 0.75f, 0.0f));
+    glm::mat4 drawNeck = glm::scale(neckM, glm::vec3(0.1f, 0.1f, 0.1f));
+    shader.setMat4("model", drawNeck);
+    shader.setVec3("objectColor", skinColor);
+    glBindVertexArray(c.cylVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+    
+    // Head using cubeVAO (so the Front Face gets the UV properly)
+    glm::mat4 headM = glm::translate(neckM, glm::vec3(0.0f, 0.15f, 0.0f));
+    headM = glm::scale(headM, glm::vec3(0.22f, 0.25f, 0.22f));
+    shader.setMat4("model", headM);
+    // Explicitly enforce useTexture = 1 if user bound a literal face texture
+    // For now we allow procedural skin if no texture is bound
+    shader.setVec3("objectColor", skinColor);
+    glBindVertexArray(c.cubeVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    
+    // --- 6. CAMERA FLASH (Photographers only) ---
+    if (state == NPCState::TAKING_PICTURE && flashPhase > 2.85f) { 
+        shader.setVec3("pointLights[31].position", position + glm::vec3(0.0f, 1.5f, 0.0f));
+        shader.setVec3("pointLights[31].ambient", glm::vec3(0.5f));
+        shader.setVec3("pointLights[31].diffuse", glm::vec3(5.0f, 5.0f, 6.0f)); // Bright blue-white flash
+        shader.setVec3("pointLights[31].specular", glm::vec3(4.0f));
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -372,7 +771,152 @@ inline void drawSecondFloorLayout(float floorY, float ceilingY) {
     shader.setMat4("model", curtTop);
     glDrawElements(GL_TRIANGLES, curtainVerts, GL_UNSIGNED_INT, 0);
     
-    // --- 3. VIP CINEMA CHAIRS (Flat Generic Layout) ---
+    // --- 3. LOBBY DIVIDER WALL (Z = 70.0f) ---
+    glm::vec3 wallColor(0.2f, 0.18f, 0.15f);
+    float wallZ = 70.0f;
+    float archWidth = 14.0f;
+    
+    // Left Wall
+    float leftW = (roomWidth / 2.0f) - (archWidth / 2.0f);
+    drawCube(shader, c.cubeVAO, glm::vec3(leftW / 2.0f, floorY + roomHeight / 2.0f, wallZ),
+             glm::vec3(leftW, roomHeight, 0.5f), wallColor, 0, 0.2f, 0.5f, 0.1f, 4.0f);
+             
+    // Right Wall
+    float rightW = leftW;
+    drawCube(shader, c.cubeVAO, glm::vec3(roomWidth - rightW / 2.0f, floorY + roomHeight / 2.0f, wallZ),
+             glm::vec3(rightW, roomHeight, 0.5f), wallColor, 0, 0.2f, 0.5f, 0.1f, 4.0f);
+             
+    // Top Arch lintel
+    float archH = roomHeight - 5.0f;
+    drawCube(shader, c.cubeVAO, glm::vec3(roomWidth / 2.0f, floorY + 5.0f + archH / 2.0f, wallZ),
+             glm::vec3(archWidth, archH, 0.5f), wallColor, 0, 0.2f, 0.5f, 0.1f, 4.0f);
+             
+    // --- 4. CONCESSION STAND (Lobby at Z = 80.0f, X = 30.0f) ---
+    glm::vec3 counterColor(0.4f, 0.1f, 0.1f);  // Glossy red counter
+    glm::vec3 topColor(0.9f, 0.9f, 0.9f);      // Marble top
+    glm::vec3 popcornGlass(0.7f, 0.8f, 0.9f);  // Glass box
+    glm::vec3 popcorn(0.9f, 0.8f, 0.2f);       // Yellow kernels
+    
+    float counterX = 30.0f;
+    float counterZ = 80.0f;
+    
+    // Base counter body
+    drawCube(shader, c.cubeVAO, glm::vec3(counterX, floorY + 0.6f, counterZ),
+             glm::vec3(8.0f, 1.2f, 2.5f), counterColor, 0, 0.2f, 0.6f, 0.4f, 16.0f);
+    // Marble top
+    drawCube(shader, c.cubeVAO, glm::vec3(counterX, floorY + 1.25f, counterZ),
+             glm::vec3(8.4f, 0.1f, 2.8f), topColor, 0, 0.2f, 0.6f, 0.8f, 64.0f);
+             
+    // VINTAGE POPCORN MACHINE
+    float pmX = counterX - 2.0f;
+    float pmY = floorY + 1.3f;
+    
+    // Red metallic stand base
+    drawCube(shader, c.cubeVAO, glm::vec3(pmX, pmY + 0.2f, counterZ),
+             glm::vec3(1.4f, 0.4f, 1.4f), glm::vec3(0.6f, 0.1f, 0.1f), 0, 0.3f, 0.6f, 0.8f, 32.0f);
+             
+    // Thick glass walls (Alpha = 0.3)
+    shader.setFloat("objectAlpha", 0.3f);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    drawCube(shader, c.cubeVAO, glm::vec3(pmX, pmY + 1.1f, counterZ),
+             glm::vec3(1.3f, 1.4f, 1.3f), popcornGlass, 0, 0.8f, 0.2f, 0.9f, 128.0f);
+    glDisable(GL_BLEND);
+    shader.setFloat("objectAlpha", 1.0f); // Restore
+    
+    // Internal Heat Lamp Glow (Emissive)
+    drawCube(shader, c.cubeVAO, glm::vec3(pmX, pmY + 1.7f, counterZ),
+             glm::vec3(0.2f, 0.1f, 0.2f), glm::vec3(2.0f, 1.0f, 0.1f), 0, 3.0f, 0.0f, 0.0f, 1.0f);
+             
+    // Pile of popcorn kernels inside
+    for(int k=0; k<25; ++k) {
+        float kox = ((rand() % 100) / 100.0f - 0.5f) * 1.0f;
+        float koz = ((rand() % 100) / 100.0f - 0.5f) * 1.0f;
+        float koy = pmY + 0.45f + ((rand() % 100) / 100.0f) * 0.4f;
+        drawCube(shader, c.cubeVAO, glm::vec3(pmX + kox, koy, counterZ + koz),
+                 glm::vec3(0.12f), popcorn, 0, 0.3f, 0.8f, 0.1f, 2.0f);
+    }
+    
+    // Striped Awning/Canopy on top
+    for (int s = 0; s < 7; ++s) {
+        float stripW = 1.5f / 7.0f;
+        float sx = (pmX - 0.75f) + stripW * s + (stripW / 2.0f);
+        glm::vec3 col = (s % 2 == 0) ? glm::vec3(0.8f, 0.1f, 0.1f) : glm::vec3(0.9f, 0.9f, 0.9f);
+        
+        glm::mat4 canMat = glm::mat4(1.0f);
+        canMat = glm::translate(canMat, glm::vec3(sx, pmY + 1.9f, counterZ));
+        canMat = glm::rotate(canMat, glm::radians(10.0f), glm::vec3(1.0f, 0.0f, 0.0f)); // Slanted
+        canMat = glm::scale(canMat, glm::vec3(stripW, 0.1f, 1.6f));
+        shader.setMat4("model", canMat);
+        shader.setVec3("objectColor", col);
+        glBindVertexArray(c.cubeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+    
+    // Display Procedural Popcorn Boxes on the counter
+    drawPopcornBoxHelper(glm::vec3(counterX + 1.0f, pmY + 0.18f, counterZ - 0.5f));
+    drawPopcornBoxHelper(glm::vec3(counterX + 1.5f, pmY + 0.18f, counterZ - 0.3f));
+    drawPopcornBoxHelper(glm::vec3(counterX + 2.0f, pmY + 0.18f, counterZ - 0.6f));
+    
+    // Cash Register
+    drawCube(shader, c.cubeVAO, glm::vec3(counterX + 3.0f, pmY + 0.2f, counterZ + 0.2f),
+             glm::vec3(0.6f, 0.4f, 0.8f), glm::vec3(0.2f), 0, 0.2f, 0.5f, 0.0f, 4.0f);
+             
+             
+    // --- 5. FREE-STANDING MOVIE BILLBOARDS (Lobby) ---
+    // Place them midway between the concession stand and the divider wall
+    // Z = 75.0f, facing +Z (so people entering from escalator see them)
+    glm::vec3 pColor(0.8f, 0.8f, 0.8f);
+    
+    auto drawBillboard = [&](float bx, float bz) {
+        // Stand base
+        drawCube(shader, c.cubeVAO, glm::vec3(bx, floorY + 0.1f, bz),
+                 glm::vec3(3.0f, 0.2f, 1.5f), glm::vec3(0.1f), 0, 0.2f, 0.5f, 0.3f, 16.0f);
+        // Stand legs
+        drawCube(shader, c.cubeVAO, glm::vec3(bx - 1.0f, floorY + 1.5f, bz),
+                 glm::vec3(0.1f, 3.0f, 0.1f), glm::vec3(0.1f), 0, 0.2f, 0.4f, 0.2f, 16.0f);
+        drawCube(shader, c.cubeVAO, glm::vec3(bx + 1.0f, floorY + 1.5f, bz),
+                 glm::vec3(0.1f, 3.0f, 0.1f), glm::vec3(0.1f), 0, 0.2f, 0.4f, 0.2f, 16.0f);
+                 
+        // Poster Plane
+        glm::mat4 bm = glm::mat4(1.0f);
+        bm = glm::translate(bm, glm::vec3(bx, floorY + 3.0f, bz + 0.1f));
+        bm = glm::rotate(bm, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // Face +Z
+        bm = glm::scale(bm, glm::vec3(2.5f, 4.0f, 0.1f)); // Portrait poster
+        
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, c.texBillboard);
+        shader.setInt("texture1", 0);
+        shader.setInt("useTexture", 1);
+        shader.setInt("textureType", 0);
+        
+        shader.setMat4("model", bm);
+        shader.setVec3("objectColor", pColor);
+        shader.setFloat("ambientStrength", 1.5f); // Brightly lit poster
+        shader.setFloat("diffuseStrength", 0.1f);
+        shader.setFloat("specularStrength", 0.0f);
+        shader.setFloat("shininess", 2.0f);
+        
+        glBindVertexArray(c.cubeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        
+        shader.setInt("useTexture", 0);
+    };
+    
+    drawBillboard(45.0f, 75.0f);
+    drawBillboard(95.0f, 75.0f);
+    
+    // --- 6. RENDER NPCs ---
+    // Ensure we reset any stray point light (camera flash) before drawing NPCs
+    shader.setVec3("pointLights[31].ambient", glm::vec3(0.0f));
+    shader.setVec3("pointLights[31].diffuse", glm::vec3(0.0f));
+    shader.setVec3("pointLights[31].specular", glm::vec3(0.0f));
+    
+    for (const auto& n : npcs) {
+        drawProceduralNPC(n.position, n.rotationY, n.walkCycleTime, n.flashTimer, n.state);
+    }
+    
+    // --- 7. VIP CINEMA CHAIRS (Auditorium Z=0 to 70) ---
     // Place chairs perfectly on the flat generic floor
     int rows = 12;
     int chairsPerRow = 16;

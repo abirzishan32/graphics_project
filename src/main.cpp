@@ -62,7 +62,7 @@ void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsig
 void setFancyWindowContext(Shader& shader, unsigned int cubeVAO);
 void setFancyWindowYaw(float yawDeg);
 void drawFancyWindow(glm::vec3 position);
-void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int sphereVAO, int sphereCount);
+void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int sphereVAO, int sphereCount, unsigned int cylVAO);
 void drawElevatorSystem(Shader& shader, unsigned int cubeVAO);
 unsigned int createCurvedBarrierVAO(int& outVertexCount);
 void drawCurvedBarrier(Shader& shader, unsigned int VAO, int vertexCount);
@@ -409,6 +409,9 @@ int main()
         processInput(window);
         EscalatorSystem::updateRide(camera, deltaTime, FLOOR_TO_FLOOR_HEIGHT, LOT_WIDTH, LOT_DEPTH, WALL_THICKNESS);
         elevator.update(deltaTime, camera);
+        
+        // Update second floor NPC animations and AI behaviors
+        SecondFloorDesign::updateNPCs(deltaTime, 2.0f * FLOOR_TO_FLOOR_HEIGHT);
 
         // Get actual framebuffer size for High-DPI displays (Mac)
         int display_w, display_h;
@@ -1299,7 +1302,7 @@ void drawFancyWindow(glm::vec3 position)
     glDisable(GL_BLEND);
 }
 
-void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int sphereVAO, int sphereCount)
+void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int sphereVAO, int sphereCount, unsigned int cylVAO)
 {
     glm::vec3 concreteColor(0.42f, 0.41f, 0.39f);
     glm::vec3 wallColor(0.38f, 0.37f, 0.36f);
@@ -1504,7 +1507,7 @@ void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int q
                      glm::vec3(0.16f, 0.16f, 1.8f), barColor, 4,
                      entranceLightsOn ? 0.9f : 0.1f, 0.35f, 0.25f, 12.0f);
         } else if (floor == 2) {
-            SecondFloorDesign::setRenderContext(shader, cubeVAO, 16, sphereVAO, sphereCount, texSofa);
+            SecondFloorDesign::setRenderContext(shader, cubeVAO, cylVAO, sphereVAO, sphereCount, texSofa, texAarongBillboard);
             SecondFloorDesign::drawSecondFloorLayout(floorY, ceilingY);
         }
 
@@ -2795,7 +2798,7 @@ void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsig
     drawOutdoorEnvironment(shader, cubeVAO, quadVAO, cylVAO);
 
     // Draw additional empty floors stacked above ground floor
-    drawStackedEmptyFloors(shader, cubeVAO, quadVAO, sphereVAO, sphereCount);
+    drawStackedEmptyFloors(shader, cubeVAO, quadVAO, sphereVAO, sphereCount, cylVAO);
 
     // Draw the parking lot
     drawParkingLot(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);
