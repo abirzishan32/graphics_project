@@ -427,6 +427,8 @@ inline void drawCinemaChair(glm::vec3 position, float rotationDeg) {
 
 enum class NPCState { WANDERING, IN_LINE, TAKING_PICTURE, SELLING };
 
+enum Gender { MALE, FEMALE };
+
 struct NPC {
     glm::vec3 position;
     glm::vec3 targetPosition;
@@ -434,6 +436,8 @@ struct NPC {
     float speed;
     float walkCycleTime;
     NPCState state;
+    Gender gender;
+    glm::vec3 clothingColor;
     float flashTimer;
     float waitTimer;
 };
@@ -442,60 +446,138 @@ static std::vector<NPC> npcs;
 
 inline void initNPCs(float floorY) {
     if (!npcs.empty()) return;
+
+    const int wanderingCount = 28;
+    const int lineCount = 6;
+    const int photographerCount = 2;
+    const int salesmanCount = 1;
+    const int totalCrowd = wanderingCount + lineCount + photographerCount + salesmanCount;
+
+    std::vector<Gender> genderPool;
+    genderPool.reserve(totalCrowd);
+    for (int i = 0; i < totalCrowd; ++i) {
+        genderPool.push_back(i < totalCrowd / 2 ? MALE : FEMALE);
+    }
+    for (int i = totalCrowd - 1; i > 0; --i) {
+        int j = rand() % (i + 1);
+        Gender tmp = genderPool[i];
+        genderPool[i] = genderPool[j];
+        genderPool[j] = tmp;
+    }
+    int genderIndex = 0;
+
+    auto randomBrightColor = []() {
+        float r = 0.25f + ((rand() % 100) / 100.0f) * 0.75f;
+        float g = 0.25f + ((rand() % 100) / 100.0f) * 0.75f;
+        float b = 0.25f + ((rand() % 100) / 100.0f) * 0.75f;
+        float maxC = std::max(r, std::max(g, b));
+        if (maxC < 0.65f) {
+            float boost = 0.65f - maxC;
+            r = std::min(1.0f, r + boost);
+            g = std::min(1.0f, g + boost);
+            b = std::min(1.0f, b + boost);
+        }
+        return glm::vec3(r, g, b);
+    };
+
+    std::vector<glm::vec2> usedPositions;
+    usedPositions.reserve(totalCrowd);
+    auto randomLobbyPosition2D = [&](float minDistance) {
+        const float minX = 18.0f;
+        const float maxX = 122.0f;
+        const float minZ = 73.0f;
+        const float maxZ = 94.0f;
+
+        glm::vec2 candidate((minX + maxX) * 0.5f, (minZ + maxZ) * 0.5f);
+        bool found = false;
+        for (int attempt = 0; attempt < 60 && !found; ++attempt) {
+            float x = minX + ((rand() % 10000) / 10000.0f) * (maxX - minX);
+            float z = minZ + ((rand() % 10000) / 10000.0f) * (maxZ - minZ);
+            candidate = glm::vec2(x, z);
+
+            found = true;
+            for (const glm::vec2& p : usedPositions) {
+                if (glm::distance(p, candidate) < minDistance) {
+                    found = false;
+                    break;
+                }
+            }
+        }
+        usedPositions.push_back(candidate);
+        return candidate;
+    };
     
-    // 5 Wanderers in the lobby
-    for (int i = 0; i < 5; ++i) {
+    // Main wandering crowd across lobby floor
+    for (int i = 0; i < wanderingCount; ++i) {
+        glm::vec2 pos2 = randomLobbyPosition2D(2.2f);
+        glm::vec2 target2 = randomLobbyPosition2D(2.0f);
         NPC n;
-        n.position = glm::vec3(20.0f + (rand() % 100), floorY, 73.0f + (rand() % 20));
-        n.targetPosition = glm::vec3(20.0f + (rand() % 100), floorY, 73.0f + (rand() % 20));
-        n.rotationY = 0.0f;
+        n.position = glm::vec3(pos2.x, floorY, pos2.y);
+        n.targetPosition = glm::vec3(target2.x, floorY, target2.y);
+        glm::vec3 facingDir = n.targetPosition - n.position;
+        n.rotationY = glm::degrees(atan2(facingDir.x, facingDir.z));
         n.speed = 1.0f + ((rand() % 100) / 200.0f); // 1.0 to 1.5
         n.walkCycleTime = (rand() % 100) / 10.0f;
         n.state = NPCState::WANDERING;
+        n.gender = genderPool[genderIndex++];
+        n.clothingColor = randomBrightColor();
         n.flashTimer = 0.0f;
         n.waitTimer = 0.0f;
         npcs.push_back(n);
     }
     
-    // 4 people in line for concession (Queue)
-    for (int i = 0; i < 4; ++i) {
+    // Queue near concession with slight random spread
+    for (int i = 0; i < lineCount; ++i) {
+        glm::vec2 queuePos = randomLobbyPosition2D(1.4f);
+        queuePos.x = 26.0f + ((rand() % 1000) / 1000.0f) * 8.0f;
+        queuePos.y = 83.0f + ((rand() % 1000) / 1000.0f) * 10.0f;
         NPC n;
-        n.position = glm::vec3(30.0f, floorY, 84.0f + i * 2.0f);
+        n.position = glm::vec3(queuePos.x, floorY, queuePos.y);
         n.targetPosition = n.position;
         n.rotationY = 180.0f; // Face -Z (towards counter)
         n.speed = 0.0f;
         n.walkCycleTime = 0.0f;
         n.state = NPCState::IN_LINE;
+        n.gender = genderPool[genderIndex++];
+        n.clothingColor = randomBrightColor();
         n.flashTimer = 0.0f;
         n.waitTimer = 0.0f;
         npcs.push_back(n);
     }
     
-    // 2 People taking pictures at billboards
-    for (int i = 0; i < 2; ++i) {
+    // Photographers near billboards
+    for (int i = 0; i < photographerCount; ++i) {
         NPC n;
-        n.position = glm::vec3(45.0f + i * 50.0f, floorY, 78.0f); 
+        n.position = glm::vec3(45.0f + i * 50.0f + ((rand() % 1000) / 1000.0f - 0.5f) * 3.0f,
+                               floorY,
+                               78.0f + ((rand() % 1000) / 1000.0f - 0.5f) * 2.5f);
         n.targetPosition = n.position;
         n.rotationY = 180.0f; // Look back at billboard
         n.speed = 0.0f;
         n.walkCycleTime = 0.0f;
         n.state = NPCState::TAKING_PICTURE;
+        n.gender = genderPool[genderIndex++];
+        n.clothingColor = randomBrightColor();
         n.flashTimer = (rand() % 500) / 100.0f;
         n.waitTimer = 0.0f;
         npcs.push_back(n);
     }
     
-    // 1 Concession Salesman behind the counter
-    NPC salesman;
-    salesman.position = glm::vec3(30.0f, floorY, 78.5f); // Inside the counter bounds
-    salesman.targetPosition = salesman.position;
-    salesman.rotationY = 0.0f; // Face +Z (towards customers)
-    salesman.speed = 0.0f;
-    salesman.walkCycleTime = 0.0f; 
-    salesman.state = NPCState::SELLING;
-    salesman.flashTimer = 0.0f;
-    salesman.waitTimer = 0.0f;
-    npcs.push_back(salesman);
+    // Concession sales staff
+    for (int i = 0; i < salesmanCount; ++i) {
+        NPC salesman;
+        salesman.position = glm::vec3(30.0f + ((rand() % 1000) / 1000.0f - 0.5f) * 1.5f, floorY, 78.5f);
+        salesman.targetPosition = salesman.position;
+        salesman.rotationY = 0.0f; // Face +Z (towards customers)
+        salesman.speed = 0.0f;
+        salesman.walkCycleTime = 0.0f;
+        salesman.state = NPCState::SELLING;
+        salesman.gender = genderPool[genderIndex++];
+        salesman.clothingColor = randomBrightColor();
+        salesman.flashTimer = 0.0f;
+        salesman.waitTimer = 0.0f;
+        npcs.push_back(salesman);
+    }
 }
 
 inline void updateNPCs(float deltaTime, float floorY) {
@@ -534,19 +616,26 @@ inline void updateNPCs(float deltaTime, float floorY) {
     }
 }
 
-inline void drawProceduralNPC(glm::vec3 position, float rotationY, float cycle, float flashPhase, NPCState state) {
+inline void drawProceduralNPC(NPC& npc, float walkCycleTime) {
     RenderContext& c = ctx();
     if (!c.shader || c.cubeVAO == 0 || c.cylVAO == 0 || c.sphereVAO == 0) return;
     Shader& shader = *c.shader;
+
+    glm::vec3 position = npc.position;
+    float rotationY = npc.rotationY;
+    float cycle = walkCycleTime;
+    float flashPhase = npc.flashTimer;
+    NPCState state = npc.state;
+    bool isFemale = (npc.gender == FEMALE);
     
     glm::vec3 skinColor(0.85f, 0.65f, 0.5f);
-    glm::vec3 shirtColor(0.2f, 0.4f, 0.7f);
+    glm::vec3 shirtColor = npc.clothingColor;
     glm::vec3 pantsColor(0.1f, 0.1f, 0.15f);
     glm::vec3 shoeColor(0.05f, 0.05f, 0.05f);
     
     // Adjust colors for salesman
     if (state == NPCState::SELLING) {
-        shirtColor = glm::vec3(0.9f, 0.1f, 0.1f);   // Red uniform uniform
+        shirtColor = glm::mix(npc.clothingColor, glm::vec3(0.85f, 0.15f, 0.15f), 0.5f);
         pantsColor = glm::vec3(0.9f, 0.9f, 0.9f);   // White pants
     }
     
@@ -615,28 +704,48 @@ inline void drawProceduralNPC(glm::vec3 position, float rotationY, float cycle, 
         glBindVertexArray(c.cubeVAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
     };
-    drawLeg(0, hipL, kneeL); // Left leg
-    drawLeg(1, hipR, kneeR); // Right leg
+    if (!isFemale) {
+        drawLeg(0, hipL, kneeL); // Left leg
+        drawLeg(1, hipR, kneeR); // Right leg
+    } else {
+        drawLeg(0, hipL * 0.8f, kneeL * 0.6f);
+        drawLeg(1, hipR * 0.8f, kneeR * 0.6f);
+    }
     
     // --- 3. UPPER TORSO (Spine -> Chest) ---
     glm::mat4 torsoM = glm::translate(pelvisM, glm::vec3(0.0f, 0.0f, 0.0f));
-    // Optional spinal twist opposite to pelvis would go here
     glm::mat4 drawTorso = glm::translate(torsoM, glm::vec3(0.0f, 0.35f, 0.0f));
-    drawTorso = glm::scale(drawTorso, glm::vec3(0.35f, 0.7f, 0.2f));
+    drawTorso = glm::scale(drawTorso, isFemale ? glm::vec3(0.30f, 0.65f, 0.19f) : glm::vec3(0.35f, 0.7f, 0.2f));
     shader.setMat4("model", drawTorso);
     shader.setVec3("objectColor", shirtColor);
     glBindVertexArray(c.cubeVAO);
     glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    if (isFemale) {
+        // Flared lower dress built from stacked cylinders for a tapered silhouette
+        for (int seg = 0; seg < 3; ++seg) {
+            float t = seg / 2.0f;
+            float segY = 0.20f - t * 0.28f;
+            float radius = 0.20f + t * 0.12f;
+            glm::mat4 dressM = glm::translate(torsoM, glm::vec3(0.0f, segY, 0.0f));
+            dressM = glm::scale(dressM, glm::vec3(radius, 0.24f, radius));
+            shader.setMat4("model", dressM);
+            shader.setVec3("objectColor", glm::mix(shirtColor, glm::vec3(0.95f), 0.08f));
+            glBindVertexArray(c.cylVAO);
+            glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+        }
+    }
     
     // --- 4. UPPER LIMBS (Shoulder -> Upper Arm -> Lower Arm -> Hand) ---
     auto drawArm = [&](int side, float shoulderFlex, float elbowFlex) {
         float dirMultiplier = (side == 0) ? -1.0f : 1.0f; 
+        float shoulderWidth = isFemale ? 0.20f : 0.24f;
         
         // Upper Arm
-        glm::mat4 uArmM = glm::translate(torsoM, glm::vec3(0.24f * dirMultiplier, 0.6f, 0.0f)); // Shoulder pivot
+        glm::mat4 uArmM = glm::translate(torsoM, glm::vec3(shoulderWidth * dirMultiplier, 0.58f, 0.0f)); // Shoulder pivot
         uArmM = glm::rotate(uArmM, glm::radians(shoulderFlex), glm::vec3(1.0f, 0.0f, 0.0f));
         glm::mat4 drawUArm = glm::translate(uArmM, glm::vec3(0.0f, -0.15f, 0.0f)); 
-        drawUArm = glm::scale(drawUArm, glm::vec3(0.12f, 0.3f, 0.12f));
+        drawUArm = glm::scale(drawUArm, isFemale ? glm::vec3(0.10f, 0.28f, 0.10f) : glm::vec3(0.12f, 0.3f, 0.12f));
         shader.setMat4("model", drawUArm);
         shader.setVec3("objectColor", shirtColor); // Sleeve
         glBindVertexArray(c.cylVAO);
@@ -681,6 +790,16 @@ inline void drawProceduralNPC(glm::vec3 position, float rotationY, float cycle, 
     shader.setVec3("objectColor", skinColor);
     glBindVertexArray(c.cubeVAO);
     glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    if (isFemale) {
+        // Long hair volume at back of head (elongated sphere/ellipsoid)
+        glm::mat4 hairM = glm::translate(neckM, glm::vec3(0.0f, 0.12f, -0.15f));
+        hairM = glm::scale(hairM, glm::vec3(0.24f, 0.36f, 0.18f));
+        shader.setMat4("model", hairM);
+        shader.setVec3("objectColor", glm::vec3(0.16f, 0.10f, 0.05f));
+        glBindVertexArray(c.sphereVAO);
+        glDrawElements(GL_TRIANGLES, c.sphereCount, GL_UNSIGNED_INT, 0);
+    }
     
     // --- 6. CAMERA FLASH (Photographers only) ---
     if (state == NPCState::TAKING_PICTURE && flashPhase > 2.85f) { 
@@ -920,8 +1039,8 @@ inline void drawSecondFloorLayout(float floorY, float ceilingY) {
     shader.setVec3("pointLights[31].diffuse", glm::vec3(0.0f));
     shader.setVec3("pointLights[31].specular", glm::vec3(0.0f));
     
-    for (const auto& n : npcs) {
-        drawProceduralNPC(n.position, n.rotationY, n.walkCycleTime, n.flashTimer, n.state);
+    for (auto& n : npcs) {
+        drawProceduralNPC(n, n.walkCycleTime);
     }
     
     // --- 7. VIP CINEMA CHAIRS (Auditorium Z=0 to 70) ---
