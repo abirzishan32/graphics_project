@@ -25,7 +25,8 @@ struct RenderContext {
     unsigned int sphereVAO = 0;
     int sphereCount = 0;
     unsigned int texSofa = 0;
-    unsigned int texBillboard = 0;
+    unsigned int texBillboardClockwork = 0;
+    unsigned int texBillboardInterstellar = 0;
 };
 
 inline RenderContext& ctx() {
@@ -39,7 +40,8 @@ inline void setRenderContext(Shader& shader,
                              unsigned int sphereVAO,
                              int sphereCount,
                              unsigned int texSofa,
-                             unsigned int texBillboard) {
+                             unsigned int texBillboardClockwork,
+                             unsigned int texBillboardInterstellar) {
     RenderContext& c = ctx();
     c.shader = &shader;
     c.cubeVAO = cubeVAO;
@@ -47,7 +49,8 @@ inline void setRenderContext(Shader& shader,
     c.sphereVAO = sphereVAO;
     c.sphereCount = sphereCount;
     c.texSofa = texSofa;
-    c.texBillboard = texBillboard;
+    c.texBillboardClockwork = texBillboardClockwork;
+    c.texBillboardInterstellar = texBillboardInterstellar;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -868,7 +871,7 @@ inline void drawSecondFloorLayout(float floorY, float ceilingY) {
     // Z = 75.0f, facing +Z (so people entering from escalator see them)
     glm::vec3 pColor(0.8f, 0.8f, 0.8f);
     
-    auto drawBillboard = [&](float bx, float bz) {
+    auto drawBillboard = [&](float bx, float bz, unsigned int texPoster) {
         // Stand base
         drawCube(shader, c.cubeVAO, glm::vec3(bx, floorY + 0.1f, bz),
                  glm::vec3(3.0f, 0.2f, 1.5f), glm::vec3(0.1f), 0, 0.2f, 0.5f, 0.3f, 16.0f);
@@ -884,11 +887,16 @@ inline void drawSecondFloorLayout(float floorY, float ceilingY) {
         bm = glm::rotate(bm, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // Face +Z
         bm = glm::scale(bm, glm::vec3(2.5f, 4.0f, 0.1f)); // Portrait poster
         
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, c.texBillboard);
-        shader.setInt("texture1", 0);
-        shader.setInt("useTexture", 1);
-        shader.setInt("textureType", 0);
+        if (texPoster != 0) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, texPoster);
+            shader.setInt("texture1", 0);
+            shader.setInt("useTexture", 1);
+            shader.setInt("textureType", 0);
+        } else {
+            shader.setInt("useTexture", 0);
+            shader.setInt("textureType", 0);
+        }
         
         shader.setMat4("model", bm);
         shader.setVec3("objectColor", pColor);
@@ -903,8 +911,8 @@ inline void drawSecondFloorLayout(float floorY, float ceilingY) {
         shader.setInt("useTexture", 0);
     };
     
-    drawBillboard(45.0f, 75.0f);
-    drawBillboard(95.0f, 75.0f);
+    drawBillboard(45.0f, 75.0f, c.texBillboardClockwork);
+    drawBillboard(95.0f, 75.0f, c.texBillboardInterstellar);
     
     // --- 6. RENDER NPCs ---
     // Ensure we reset any stray point light (camera flash) before drawing NPCs

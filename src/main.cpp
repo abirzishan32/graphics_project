@@ -125,6 +125,8 @@ unsigned int texElevatorButtons = 0;       // button overlay texture
 unsigned int texSevenSegment[10] = {0};    // 0..9 LED digit textures
 unsigned int escalatorBillboardVAO = 0;
 unsigned int texAarongBillboard = 0;
+unsigned int texClockworkBillboard = 0;
+unsigned int texInterstellarBillboard = 0;
 
 Shader* gFancyWindowShader = nullptr;
 unsigned int gFancyWindowCubeVAO = 0;
@@ -393,6 +395,8 @@ int main()
     texElevatorPanelBase = loadTexture("container.jpg");
     texElevatorButtons   = loadTexture("elevator-buttons.png");
     texAarongBillboard   = loadTexture("src/advertisements/aarong.jpeg");
+    texClockworkBillboard = loadTexture("src/rfad.jpeg");
+    texInterstellarBillboard = loadTexture("src/intersteller.jpg");
     for (int i = 0; i < 10; ++i) {
         std::string path = "src/seven-segments/" + std::to_string(i) + ".png";
         texSevenSegment[i] = loadTexture(path.c_str());
@@ -1507,7 +1511,8 @@ void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int q
                      glm::vec3(0.16f, 0.16f, 1.8f), barColor, 4,
                      entranceLightsOn ? 0.9f : 0.1f, 0.35f, 0.25f, 12.0f);
         } else if (floor == 2) {
-            SecondFloorDesign::setRenderContext(shader, cubeVAO, cylVAO, sphereVAO, sphereCount, texSofa, texAarongBillboard);
+            SecondFloorDesign::setRenderContext(shader, cubeVAO, cylVAO, sphereVAO, sphereCount,
+                                               texSofa, texClockworkBillboard, texInterstellarBillboard);
             SecondFloorDesign::drawSecondFloorLayout(floorY, ceilingY);
         }
 
