@@ -425,9 +425,17 @@ inline void drawCinemaChair(glm::vec3 position, float rotationDeg) {
 // PROCEDURAL NPC SYSTEM (HIERARCHICAL)
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum class NPCState { WANDERING, IN_LINE, TAKING_PICTURE, SELLING };
+enum class NPCState { WANDERING, IN_LINE, TAKING_PICTURE, SELLING, FINDING_SEAT, SITTING };
 
 enum Gender { MALE, FEMALE };
+
+struct Seat {
+    glm::vec3 position;
+    float rotationY;
+    bool isOccupied;
+};
+
+static std::vector<Seat> cinemaSeats;
 
 struct NPC {
     glm::vec3 position;
@@ -440,6 +448,8 @@ struct NPC {
     glm::vec3 clothingColor;
     float flashTimer;
     float waitTimer;
+    std::vector<glm::vec3> path;
+    int assignedSeatIndex = -1;
 };
 
 static std::vector<NPC> npcs;
@@ -480,6 +490,35 @@ inline void initNPCs(float floorY) {
         return glm::vec3(r, g, b);
     };
 
+    // Init seats first
+    const float roomWidth = 140.0f;
+    int rows = 12;
+    int chairsPerRow = 16;
+    float chairSpacingX = 2.8f;
+    float rowSpacingZ = 3.5f;
+    float startZ = 20.0f;
+    float corridorWidth = 6.0f;
+    
+    for (int r = 0; r < rows; ++r) {
+        float zPos = startZ + r * rowSpacingZ;
+        float yPos = floorY + 0.2f;
+        float startX = roomWidth / 2.0f - (chairsPerRow / 2.0f) * chairSpacingX;
+        
+        for (int c = 0; c < chairsPerRow; ++c) {
+            float xPos = startX + c * chairSpacingX;
+            if (xPos > roomWidth / 2.0f - corridorWidth / 2.0f && xPos < roomWidth / 2.0f + corridorWidth / 2.0f) {
+                continue;
+            }
+            float xOffsetFromCenter = xPos - (roomWidth / 2.0f);
+            float focusYaw = 180.0f - (xOffsetFromCenter * 0.3f);
+            Seat s;
+            s.position = glm::vec3(xPos, yPos, zPos);
+            s.rotationY = focusYaw;
+            s.isOccupied = false;
+            cinemaSeats.push_back(s);
+        }
+    }
+    
     std::vector<glm::vec2> usedPositions;
     usedPositions.reserve(totalCrowd);
     auto randomLobbyPosition2D = [&](float minDistance) {
@@ -595,6 +634,32 @@ inline void updateNPCs(float deltaTime, float floorY) {
                 dir.y = 0.0f;
                 float dist = glm::length(dir);
                 if (dist < 0.2f) {
+                    // Check if we want to go watch a movie (10% chance)
+                    if (rand() % 10 == 0) {
+                        int seatIdx = -1;
+                        for (size_t s = 0; s < cinemaSeats.size(); ++s) {
+                            if (!cinemaSeats[s].isOccupied) {
+                                seatIdx = (int)s;
+                                cinemaSeats[s].isOccupied = true;
+                                break;
+                            }
+                        }
+                        if (seatIdx != -1) {
+                            n.assignedSeatIndex = seatIdx;
+                            n.state = NPCState::FINDING_SEAT;
+                            n.path.clear();
+                            // Target Seat
+                            n.path.push_back(cinemaSeats[seatIdx].position);
+                            // Row Depth (center aisle at target Z)
+                            n.path.push_back(glm::vec3(70.0f, floorY, cinemaSeats[seatIdx].position.z));
+                            // Auditorium Archway entrance
+                            n.path.push_back(glm::vec3(70.0f, floorY, 69.0f));
+                            
+                            n.targetPosition = n.path.back();
+                            n.path.pop_back();
+                            continue;
+                        }
+                    }
                     n.waitTimer = 1.0f + (rand() % 300) / 100.0f;
                     n.targetPosition = glm::vec3(20.0f + (rand() % 100), floorY, 73.0f + (rand() % 20));
                 } else {
@@ -603,6 +668,26 @@ inline void updateNPCs(float deltaTime, float floorY) {
                     n.rotationY = glm::degrees(atan2(dir.x, dir.z));
                     n.walkCycleTime += deltaTime * n.speed * 4.0f;
                 }
+            }
+        } else if (n.state == NPCState::FINDING_SEAT) {
+            glm::vec3 dir = n.targetPosition - n.position;
+            dir.y = 0.0f;
+            float dist = glm::length(dir);
+            if (dist < 0.2f) {
+                if (!n.path.empty()) {
+                    n.targetPosition = n.path.back();
+                    n.path.pop_back();
+                } else {
+                    n.state = NPCState::SITTING;
+                    n.position = cinemaSeats[n.assignedSeatIndex].position;
+                    n.rotationY = cinemaSeats[n.assignedSeatIndex].rotationY;
+                    n.walkCycleTime = 0.0f;
+                }
+            } else {
+                dir = glm::normalize(dir);
+                n.position += dir * n.speed * deltaTime;
+                n.rotationY = glm::degrees(atan2(dir.x, dir.z));
+                n.walkCycleTime += deltaTime * n.speed * 4.0f;
             }
         } else if (n.state == NPCState::TAKING_PICTURE) {
             n.flashTimer -= deltaTime;
@@ -667,6 +752,23 @@ inline void drawProceduralNPC(NPC& npc, float walkCycleTime) {
         shoulderR = 25.0f + std::cos(cycle) * 20.0f;        // Sharp scooping
         elbowL = 40.0f + std::sin(cycle * 0.5f) * 5.0f;
         elbowR = 30.0f + std::cos(cycle) * 10.0f;
+    }
+    
+    // Seat position offset helper
+    auto sOff = [&](float x, float y, float z) {
+        float sRy = glm::radians(rotationY);
+        return glm::vec3(std::cos(sRy)*x + std::sin(sRy)*z, y, -std::sin(sRy)*x + std::cos(sRy)*z);
+    };
+
+    // Special cinematic overrides for Sitting Posture
+    if (state == NPCState::SITTING) {
+        hipL = -90.0f; hipR = -90.0f;
+        kneeL = 90.0f;  kneeR = 90.0f;
+        shoulderL = -15.0f; shoulderR = -15.0f;
+        elbowL = 60.0f;  elbowR = 60.0f;
+        pelvicBounce = 0.0f;
+        // Move backwards and down firmly into the plush cushion
+        root = glm::translate(root, sOff(0.0f, -0.4f, 0.25f)); 
     }
 
     // --- 1. PELVIS (Anchor point for legs and spine) ---
@@ -1044,32 +1146,9 @@ inline void drawSecondFloorLayout(float floorY, float ceilingY) {
     }
     
     // --- 7. VIP CINEMA CHAIRS (Auditorium Z=0 to 70) ---
-    // Place chairs perfectly on the flat generic floor
-    int rows = 12;
-    int chairsPerRow = 16;
-    float chairSpacingX = 2.8f;
-    float rowSpacingZ = 3.5f;
-    float startZ = 20.0f;
-    float corridorWidth = 6.0f;
-    
-    for (int r = 0; r < rows; ++r) {
-        float zPos = startZ + r * rowSpacingZ;
-        float yPos = floorY + 0.2f;
-        
-        float startX = roomWidth / 2.0f - (chairsPerRow / 2.0f) * chairSpacingX;
-        
-        for (int c = 0; c < chairsPerRow; ++c) {
-            float xPos = startX + c * chairSpacingX;
-            // Skip middle ones for the corridor
-            if (xPos > roomWidth / 2.0f - corridorWidth / 2.0f && xPos < roomWidth / 2.0f + corridorWidth / 2.0f) {
-                continue;
-            }
-            
-            float xOffsetFromCenter = xPos - (roomWidth / 2.0f);
-            float focusYaw = 180.0f - (xOffsetFromCenter * 0.3f);
-            
-            drawCinemaChair(glm::vec3(xPos, yPos, zPos), focusYaw);
-        }
+    if (cinemaSeats.empty()) initNPCs(floorY);
+    for (const auto& seat : cinemaSeats) {
+        drawCinemaChair(seat.position, seat.rotationY);
     }
 }
 
