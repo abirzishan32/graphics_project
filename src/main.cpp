@@ -128,6 +128,7 @@ unsigned int escalatorBillboardVAO = 0;
 unsigned int texAarongBillboard = 0;
 unsigned int texClockworkBillboard = 0;
 unsigned int texInterstellarBillboard = 0;
+unsigned int texWashroom = 0;
 
 Shader* gFancyWindowShader = nullptr;
 unsigned int gFancyWindowCubeVAO = 0;
@@ -398,6 +399,7 @@ int main()
     texAarongBillboard   = loadTexture("src/advertisements/aarong.jpeg");
     texClockworkBillboard = loadTexture("src/rfad.jpeg");
     texInterstellarBillboard = loadTexture("src/intersteller.jpg");
+    texWashroom = loadTexture("src/washroom-tile.jpeg");
     for (int i = 0; i < 10; ++i) {
         std::string path = "src/seven-segments/" + std::to_string(i) + ".png";
         texSevenSegment[i] = loadTexture(path.c_str());
@@ -1524,7 +1526,7 @@ void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int q
                      entranceLightsOn ? 0.9f : 0.1f, 0.35f, 0.25f, 12.0f);
         } else if (floor == 2) {
             SecondFloorDesign::setRenderContext(shader, cubeVAO, cylVAO, sphereVAO, sphereCount,
-                                               texSofa, texClockworkBillboard, texInterstellarBillboard);
+                                               texSofa, texClockworkBillboard, texInterstellarBillboard, texWashroom);
             SecondFloorDesign::drawSecondFloorLayout(floorY, ceilingY);
         }
 

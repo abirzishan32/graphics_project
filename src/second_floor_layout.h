@@ -27,6 +27,7 @@ struct RenderContext {
     unsigned int texSofa = 0;
     unsigned int texBillboardClockwork = 0;
     unsigned int texBillboardInterstellar = 0;
+    unsigned int texWashroom = 0;
 };
 
 inline RenderContext& ctx() {
@@ -41,7 +42,8 @@ inline void setRenderContext(Shader& shader,
                              int sphereCount,
                              unsigned int texSofa,
                              unsigned int texBillboardClockwork,
-                             unsigned int texBillboardInterstellar) {
+                             unsigned int texBillboardInterstellar,
+                             unsigned int texWashroom) {
     RenderContext& c = ctx();
     c.shader = &shader;
     c.cubeVAO = cubeVAO;
@@ -51,6 +53,7 @@ inline void setRenderContext(Shader& shader,
     c.texSofa = texSofa;
     c.texBillboardClockwork = texBillboardClockwork;
     c.texBillboardInterstellar = texBillboardInterstellar;
+    c.texWashroom = texWashroom;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -912,6 +915,280 @@ inline void drawProceduralNPC(NPC& npc, float walkCycleTime) {
     }
 }
 
+inline void drawBasin(glm::vec3 position) {
+    RenderContext& c = ctx();
+    if (!c.shader || c.cylVAO == 0) return;
+    Shader& shader = *c.shader;
+
+    glm::vec3 porcelain(0.98f, 0.98f, 0.99f);
+    glm::vec3 chrome(0.78f, 0.80f, 0.85f);
+
+    glm::mat4 bowlM = glm::mat4(1.0f);
+    bowlM = glm::translate(bowlM, position + glm::vec3(0.0f, 0.12f, 0.0f));
+    bowlM = glm::scale(bowlM, glm::vec3(0.34f, 0.10f, 0.30f));
+    if (c.texWashroom != 0) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, c.texWashroom);
+        shader.setInt("texture1", 0);
+        shader.setInt("useTexture", 1);
+    } else {
+        shader.setInt("useTexture", 0);
+    }
+    shader.setMat4("model", bowlM);
+    shader.setVec3("objectColor", porcelain);
+    shader.setInt("textureType", 0);
+    shader.setFloat("ambientStrength", 0.24f);
+    shader.setFloat("diffuseStrength", 0.55f);
+    shader.setFloat("specularStrength", 0.90f);
+    shader.setFloat("shininess", 120.0f);
+    glBindVertexArray(c.cylVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+
+    glm::mat4 lipM = glm::mat4(1.0f);
+    lipM = glm::translate(lipM, position + glm::vec3(0.0f, 0.17f, 0.0f));
+    lipM = glm::scale(lipM, glm::vec3(0.37f, 0.028f, 0.33f));
+    shader.setMat4("model", lipM);
+    shader.setVec3("objectColor", porcelain);
+    shader.setFloat("ambientStrength", 0.28f);
+    shader.setFloat("diffuseStrength", 0.50f);
+    shader.setFloat("specularStrength", 0.95f);
+    shader.setFloat("shininess", 128.0f);
+    glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+
+    shader.setInt("useTexture", 0);
+
+    glm::mat4 faucetStem = glm::mat4(1.0f);
+    faucetStem = glm::translate(faucetStem, position + glm::vec3(-0.26f, 0.26f, -0.02f));
+    faucetStem = glm::scale(faucetStem, glm::vec3(0.028f, 0.20f, 0.028f));
+    shader.setMat4("model", faucetStem);
+    shader.setVec3("objectColor", chrome);
+    shader.setFloat("ambientStrength", 0.15f);
+    shader.setFloat("diffuseStrength", 0.45f);
+    shader.setFloat("specularStrength", 0.95f);
+    shader.setFloat("shininess", 140.0f);
+    glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+
+    glm::mat4 faucetArm = glm::mat4(1.0f);
+    faucetArm = glm::translate(faucetArm, position + glm::vec3(-0.16f, 0.36f, -0.02f));
+    faucetArm = glm::rotate(faucetArm, glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    faucetArm = glm::scale(faucetArm, glm::vec3(0.020f, 0.16f, 0.020f));
+    shader.setMat4("model", faucetArm);
+    glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+
+    glm::mat4 spout = glm::mat4(1.0f);
+    spout = glm::translate(spout, position + glm::vec3(-0.01f, 0.30f, -0.02f));
+    spout = glm::scale(spout, glm::vec3(0.020f, 0.10f, 0.020f));
+    shader.setMat4("model", spout);
+    glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+}
+
+inline void drawCommode(glm::vec3 position) {
+    RenderContext& c = ctx();
+    if (!c.shader || c.cylVAO == 0 || c.cubeVAO == 0) return;
+    Shader& shader = *c.shader;
+
+    glm::vec3 porcelain(0.98f, 0.98f, 0.99f);
+
+    glm::mat4 bowlLower = glm::mat4(1.0f);
+    bowlLower = glm::translate(bowlLower, position + glm::vec3(0.0f, 0.34f, 0.0f));
+    bowlLower = glm::scale(bowlLower, glm::vec3(0.24f, 0.28f, 0.31f));
+    shader.setMat4("model", bowlLower);
+    shader.setVec3("objectColor", porcelain);
+    shader.setInt("textureType", 0);
+    shader.setFloat("ambientStrength", 0.24f);
+    shader.setFloat("diffuseStrength", 0.58f);
+    shader.setFloat("specularStrength", 1.0f);
+    shader.setFloat("shininess", 140.0f);
+    glBindVertexArray(c.cylVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+
+    glm::mat4 bowlUpper = glm::mat4(1.0f);
+    bowlUpper = glm::translate(bowlUpper, position + glm::vec3(0.0f, 0.53f, 0.02f));
+    bowlUpper = glm::scale(bowlUpper, glm::vec3(0.31f, 0.12f, 0.34f));
+    shader.setMat4("model", bowlUpper);
+    glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+
+    glm::mat4 seatM = glm::mat4(1.0f);
+    seatM = glm::translate(seatM, position + glm::vec3(0.0f, 0.63f, 0.02f));
+    seatM = glm::scale(seatM, glm::vec3(0.34f, 0.035f, 0.37f));
+    shader.setMat4("model", seatM);
+    shader.setFloat("ambientStrength", 0.20f);
+    shader.setFloat("diffuseStrength", 0.55f);
+    shader.setFloat("specularStrength", 1.0f);
+    shader.setFloat("shininess", 150.0f);
+    glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+
+    glm::mat4 lidM = glm::mat4(1.0f);
+    lidM = glm::translate(lidM, position + glm::vec3(0.0f, 0.67f, -0.01f));
+    lidM = glm::scale(lidM, glm::vec3(0.33f, 0.02f, 0.35f));
+    shader.setMat4("model", lidM);
+    glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+
+    drawCube(shader, c.cubeVAO, position + glm::vec3(0.0f, 0.95f, -0.25f),
+             glm::vec3(0.42f, 0.46f, 0.20f), porcelain, 0, 0.24f, 0.58f, 1.0f, 150.0f);
+
+    drawCube(shader, c.cubeVAO, position + glm::vec3(0.0f, 0.06f, -0.05f),
+             glm::vec3(0.18f, 0.12f, 0.18f), porcelain, 0, 0.20f, 0.55f, 0.9f, 120.0f);
+}
+
+inline void drawStallRow(glm::vec3 startPos, int numStalls) {
+    RenderContext& c = ctx();
+    if (!c.shader || c.cubeVAO == 0 || c.sphereVAO == 0) return;
+    Shader& shader = *c.shader;
+
+    const float stallWidth = 2.25f;
+    const float stallDepth = 3.0f;
+    const float stallHeight = 2.65f;
+    const float partitionThickness = 0.06f;
+    const float doorBottomGap = 0.22f;
+    const float doorTopGap = 0.30f;
+    const float doorHeight = stallHeight - doorBottomGap - doorTopGap;
+
+    glm::vec3 partitionColor(0.92f, 0.92f, 0.94f);
+    glm::vec3 doorColor(0.80f, 0.82f, 0.86f);
+    glm::vec3 knobColor(0.76f, 0.78f, 0.82f);
+
+    float firstPartitionX = startPos.x - stallWidth * 0.5f;
+    for (int i = 0; i <= numStalls; ++i) {
+        float px = firstPartitionX + i * stallWidth;
+        drawCube(shader, c.cubeVAO,
+                 glm::vec3(px, startPos.y + stallHeight * 0.5f, startPos.z),
+                 glm::vec3(partitionThickness, stallHeight, stallDepth),
+                 partitionColor, 0, 0.16f, 0.55f, 0.65f, 90.0f);
+    }
+
+    for (int i = 0; i < numStalls; ++i) {
+        float stallCenterX = startPos.x + i * stallWidth;
+
+        drawCube(shader, c.cubeVAO,
+                 glm::vec3(stallCenterX, startPos.y + stallHeight * 0.5f, startPos.z - stallDepth * 0.5f),
+                 glm::vec3(stallWidth - partitionThickness, stallHeight, partitionThickness),
+                 partitionColor, 0, 0.16f, 0.50f, 0.55f, 80.0f);
+
+        drawCube(shader, c.cubeVAO,
+                 glm::vec3(stallCenterX, startPos.y + doorBottomGap + doorHeight * 0.5f, startPos.z + stallDepth * 0.5f - partitionThickness * 0.5f),
+                 glm::vec3(stallWidth - 0.18f, doorHeight, partitionThickness),
+                 doorColor, 0, 0.18f, 0.45f, 0.45f, 64.0f);
+
+        glm::mat4 knobM = glm::mat4(1.0f);
+        knobM = glm::translate(knobM, glm::vec3(stallCenterX + stallWidth * 0.28f,
+                                                startPos.y + doorBottomGap + doorHeight * 0.5f,
+                                                startPos.z + stallDepth * 0.5f + 0.03f));
+        knobM = glm::scale(knobM, glm::vec3(0.05f));
+        shader.setMat4("model", knobM);
+        shader.setVec3("objectColor", knobColor);
+        shader.setInt("textureType", 3);
+        shader.setFloat("ambientStrength", 0.20f);
+        shader.setFloat("diffuseStrength", 0.45f);
+        shader.setFloat("specularStrength", 0.95f);
+        shader.setFloat("shininess", 140.0f);
+        glBindVertexArray(c.sphereVAO);
+        glDrawElements(GL_TRIANGLES, c.sphereCount, GL_UNSIGNED_INT, 0);
+
+        drawCommode(glm::vec3(stallCenterX, startPos.y, startPos.z - 0.75f));
+    }
+}
+
+inline void drawLuxuryRestroom(float floorY, float ceilingY) {
+    RenderContext& c = ctx();
+    if (!c.shader || c.cubeVAO == 0 || c.cylVAO == 0 || c.sphereVAO == 0) return;
+    Shader& shader = *c.shader;
+
+    const float roomMinX = 112.0f;
+    const float roomMaxX = 138.0f;
+    const float roomMinZ = 18.0f;
+    const float roomMaxZ = 54.0f;
+    const float roomW = roomMaxX - roomMinX;
+    const float roomD = roomMaxZ - roomMinZ;
+    const float roomH = ceilingY - floorY;
+    const float vanityX = roomMinX + 2.0f;
+    const float vanityZ = (roomMinZ + roomMaxZ) * 0.5f;
+    const float vanityLen = roomD - 8.0f;
+
+    if (c.texWashroom != 0) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, c.texWashroom);
+        shader.setInt("texture1", 0);
+        shader.setInt("useTexture", 1);
+    } else {
+        shader.setInt("useTexture", 0);
+    }
+
+    drawCube(shader, c.cubeVAO,
+             glm::vec3((roomMinX + roomMaxX) * 0.5f, floorY + 0.02f, (roomMinZ + roomMaxZ) * 0.5f),
+             glm::vec3(roomW, 0.04f, roomD), glm::vec3(1.0f), 0, 0.28f, 0.52f, 0.25f, 30.0f);
+
+    drawCube(shader, c.cubeVAO,
+             glm::vec3(roomMinX + 0.24f, floorY + 1.35f, vanityZ),
+             glm::vec3(0.06f, 0.7f, vanityLen - 0.8f), glm::vec3(1.0f), 0, 0.24f, 0.50f, 0.35f, 40.0f);
+
+    shader.setInt("useTexture", 0);
+
+    drawCube(shader, c.cubeVAO,
+             glm::vec3(roomMinX, floorY + roomH * 0.5f, (roomMinZ + roomMaxZ) * 0.5f),
+             glm::vec3(0.18f, roomH, roomD), glm::vec3(1.0f), 0, 0.22f, 0.55f, 0.35f, 48.0f);
+
+    drawCube(shader, c.cubeVAO,
+             glm::vec3(roomMaxX, floorY + roomH * 0.5f, (roomMinZ + roomMaxZ) * 0.5f),
+             glm::vec3(0.18f, roomH, roomD), glm::vec3(1.0f), 0, 0.22f, 0.55f, 0.35f, 48.0f);
+
+    drawCube(shader, c.cubeVAO,
+             glm::vec3((roomMinX + roomMaxX) * 0.5f, floorY + roomH * 0.5f, roomMinZ),
+             glm::vec3(roomW, roomH, 0.18f), glm::vec3(1.0f), 0, 0.22f, 0.55f, 0.35f, 48.0f);
+
+    drawCube(shader, c.cubeVAO,
+             glm::vec3(roomMinX + roomW * 0.25f, floorY + roomH * 0.5f, roomMaxZ),
+             glm::vec3(roomW * 0.5f, roomH, 0.18f), glm::vec3(1.0f), 0, 0.22f, 0.55f, 0.35f, 48.0f);
+    drawCube(shader, c.cubeVAO,
+             glm::vec3(roomMinX + roomW * 0.82f, floorY + roomH * 0.5f, roomMaxZ),
+             glm::vec3(roomW * 0.36f, roomH, 0.18f), glm::vec3(1.0f), 0, 0.22f, 0.55f, 0.35f, 48.0f);
+
+    drawCube(shader, c.cubeVAO,
+             glm::vec3(vanityX, floorY + 1.05f, vanityZ),
+             glm::vec3(1.55f, 0.22f, vanityLen), glm::vec3(0.88f, 0.88f, 0.90f), 0,
+             0.18f, 0.55f, 0.95f, 140.0f);
+
+    drawCube(shader, c.cubeVAO,
+             glm::vec3(roomMinX + 0.24f, floorY + 2.15f, vanityZ),
+             glm::vec3(0.06f, 1.9f, vanityLen - 2.0f), glm::vec3(0.76f, 0.80f, 0.86f), 5,
+             0.25f, 0.45f, 0.65f, 100.0f);
+
+    for (int i = 0; i < 4; ++i) {
+        float z = vanityZ - (vanityLen * 0.34f) + i * (vanityLen * 0.23f);
+        drawBasin(glm::vec3(vanityX, floorY + 1.15f, z));
+    }
+
+    drawCube(shader, c.cubeVAO,
+             glm::vec3(vanityX + 0.52f, floorY + 1.65f, vanityZ - 4.2f),
+             glm::vec3(0.18f, 0.34f, 0.22f), glm::vec3(0.75f, 0.78f, 0.82f), 3,
+             0.20f, 0.52f, 0.9f, 120.0f);
+
+    drawCube(shader, c.cubeVAO,
+             glm::vec3(vanityX + 0.62f, floorY + 1.34f, vanityZ + 4.4f),
+             glm::vec3(0.30f, 0.38f, 0.22f), glm::vec3(0.80f, 0.82f, 0.86f), 3,
+             0.20f, 0.48f, 0.88f, 110.0f);
+    drawCube(shader, c.cubeVAO,
+             glm::vec3(vanityX + 0.72f, floorY + 1.28f, vanityZ + 4.4f),
+             glm::vec3(0.10f, 0.26f, 0.12f), glm::vec3(0.73f, 0.76f, 0.82f), 3,
+             0.20f, 0.40f, 0.85f, 96.0f);
+
+    drawStallRow(glm::vec3(roomMinX + 10.2f, floorY, roomMinZ + 24.0f), 4);
+
+    glm::vec3 barLit(1.0f, 0.98f, 0.94f);
+    for (int i = 0; i < 3; ++i) {
+        float z = roomMinZ + 8.0f + i * ((roomD - 16.0f) / 2.0f);
+        drawCube(shader, c.cubeVAO,
+                 glm::vec3(roomMinX + 1.2f, ceilingY - 0.25f, z),
+                 glm::vec3(0.18f, 0.08f, 4.8f), barLit, 4,
+                 1.35f, 0.2f, 0.05f, 2.0f);
+    }
+
+    drawCube(shader, c.cubeVAO,
+             glm::vec3(roomMinX + 10.0f, ceilingY - 0.28f, roomMinZ + 6.0f),
+             glm::vec3(8.8f, 0.10f, 0.25f), glm::vec3(0.96f, 0.96f, 0.92f), 4,
+             1.1f, 0.2f, 0.05f, 2.0f);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SECOND FLOOR MAIN LAYOUT (MOVIE THEATER)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1150,6 +1427,9 @@ inline void drawSecondFloorLayout(float floorY, float ceilingY) {
     for (const auto& seat : cinemaSeats) {
         drawCinemaChair(seat.position, seat.rotationY);
     }
+
+    // --- 8. SIDE RESTROOM (Powder Room + Stalls) ---
+    drawLuxuryRestroom(floorY, ceilingY);
 }
 
 } // namespace SecondFloorDesign
