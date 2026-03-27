@@ -1129,21 +1129,21 @@ inline void drawLuxuryRestroom(float floorY, float ceilingY) {
              1.1f, 0.2f, 0.05f, 2.0f);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // SECOND FLOOR MAIN LAYOUT (MOVIE THEATER)
-// ─────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 inline void drawSecondFloorLayout(float floorY, float ceilingY) {
     RenderContext& c = ctx();
     if (!c.shader || c.cubeVAO == 0) return;
     Shader& shader = *c.shader;
     
-    const float roomWidth = 140.0f; // LOT_WIDTH
-    const float roomDepth = 100.0f; // LOT_DEPTH
+    const float roomWidth = 140.0f;
+    const float roomDepth = 100.0f;
     const float roomHeight = ceilingY - floorY;
     
     // --- 1. ACOUSTIC WALLS ---
-    glm::vec3 panelColor(0.2f, 0.05f, 0.05f); // Deep burgundy acoustic panels
+    glm::vec3 panelColor(0.2f, 0.05f, 0.05f);
     float padding = 0.1f;
     int numPanels = 24;
     float pSpacing = roomDepth / numPanels;
@@ -1174,7 +1174,7 @@ inline void drawSecondFloorLayout(float floorY, float ceilingY) {
     shader.setMat4("model", screenMat);
     shader.setVec3("objectColor", glm::vec3(0.9f, 0.95f, 1.0f)); 
     shader.setInt("textureType", 0);
-    shader.setFloat("ambientStrength", 3.0f); // Massive glow
+    shader.setFloat("ambientStrength", 3.0f);
     shader.setFloat("diffuseStrength", 0.1f);
     shader.setFloat("specularStrength", 0.0f);
     shader.setFloat("shininess", 1.0f);
@@ -1305,8 +1305,6 @@ inline void drawSecondFloorLayout(float floorY, float ceilingY) {
              
              
     // --- 5. FREE-STANDING MOVIE BILLBOARDS (Lobby) ---
-    // Place them midway between the concession stand and the divider wall
-    // Z = 75.0f, facing +Z (so people entering from escalator see them)
     glm::vec3 pColor(0.8f, 0.8f, 0.8f);
     
     auto drawBillboard = [&](float bx, float bz, unsigned int texPoster) {
@@ -1338,7 +1336,7 @@ inline void drawSecondFloorLayout(float floorY, float ceilingY) {
         
         shader.setMat4("model", bm);
         shader.setVec3("objectColor", pColor);
-        shader.setFloat("ambientStrength", 1.5f); // Brightly lit poster
+        shader.setFloat("ambientStrength", 1.5f);
         shader.setFloat("diffuseStrength", 0.1f);
         shader.setFloat("specularStrength", 0.0f);
         shader.setFloat("shininess", 2.0f);
@@ -1353,7 +1351,6 @@ inline void drawSecondFloorLayout(float floorY, float ceilingY) {
     drawBillboard(95.0f, 75.0f, c.texBillboardInterstellar);
     
     // --- 6. RENDER NPCs ---
-    // Ensure we reset any stray point light (camera flash) before drawing NPCs
     shader.setVec3("pointLights[31].ambient", glm::vec3(0.0f));
     shader.setVec3("pointLights[31].diffuse", glm::vec3(0.0f));
     shader.setVec3("pointLights[31].specular", glm::vec3(0.0f));
@@ -1362,16 +1359,16 @@ inline void drawSecondFloorLayout(float floorY, float ceilingY) {
         drawProceduralNPC(n, n.walkCycleTime);
     }
     
-    // --- 7. VIP CINEMA CHAIRS (Auditorium Z=0 to 70) ---
+    // --- 7. VIP CINEMA CHAIRS ---
     if (cinemaSeats.empty()) initNPCs(floorY);
     for (const auto& seat : cinemaSeats) {
         drawCinemaChair(seat.position, seat.rotationY);
     }
 
-    // --- 8. SIDE RESTROOM (Powder Room + Stalls) ---
+    // --- 8. SIDE RESTROOM ---
     drawLuxuryRestroom(floorY, ceilingY);
 }
 
-} // namespace SecondFloorDesign
+} 
 
 #endif
