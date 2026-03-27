@@ -12,6 +12,7 @@
 #include "escalator.h"
 #include "first_floor_layout.h"
 #include "second_floor_layout.h"
+#include "tree.h"
 
 #include <iostream>
 #include <vector>
@@ -2266,111 +2267,26 @@ void drawAttendantBooth(Shader& shader, unsigned int cubeVAO, glm::vec3 position
     attendant.render(shader, humanPos, 180.0f); // Facing front (toward +Z presumably if entrance is there? No, usually looks nicely)
 }
 
-// Draw a hyper-realistic tree with branching trunk and organic foliage clusters
+// Ground-tree wrapper: delegates to shared lightweight fractal tree system.
 void drawTree(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO, glm::vec3 position, float height, float spread)
 {
-    // === BARK/TRUNK COLORS (realistic brown tones like reference) ===
-    glm::vec3 barkDark(0.25f, 0.15f, 0.08f);   // Dark brown bark
-    glm::vec3 barkMid(0.35f, 0.22f, 0.12f);    // Medium brown
-    glm::vec3 barkLight(0.42f, 0.28f, 0.15f);  // Lighter brown for highlights
-    
-    // === FOLIAGE COLORS (vibrant greens like reference) ===
-    glm::vec3 leafDark(0.12f, 0.35f, 0.08f);   // Dark inner foliage
-    glm::vec3 leafMid(0.18f, 0.48f, 0.12f);    // Main foliage color
-    glm::vec3 leafLight(0.28f, 0.58f, 0.18f);  // Sunlit foliage
-    glm::vec3 leafBright(0.35f, 0.65f, 0.22f); // Brightest highlights
-    
-    float trunkHeight = height * 0.35f;
-    float trunkRadius = height * 0.06f;
-    
-    // === MAIN TRUNK (with texture variation) ===
-    // Slightly tapered - wider at base
-    drawCube(shader, cubeVAO, glm::vec3(position.x, position.y + trunkHeight * 0.25f, position.z),
-             glm::vec3(trunkRadius * 2.2f, trunkHeight * 0.5f, trunkRadius * 2.2f), barkDark, 0, 0.1f, 0.55f, 0.1f, 6.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x, position.y + trunkHeight * 0.7f, position.z),
-             glm::vec3(trunkRadius * 1.8f, trunkHeight * 0.4f, trunkRadius * 1.8f), barkMid, 0, 0.1f, 0.55f, 0.1f, 6.0f);
-    
-    // Trunk texture/bark detail variation
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x + trunkRadius * 0.3f, position.y + trunkHeight * 0.4f, position.z),
-             glm::vec3(trunkRadius * 0.5f, trunkHeight * 0.3f, trunkRadius * 0.4f), glm::vec3(0, 15, 0),
-             barkLight, 0, 0.1f, 0.5f, 0.1f, 6.0f);
-    
-    // === PRIMARY BRANCHES (split from trunk like in reference) ===
-    float branchY = position.y + trunkHeight * 0.8f;
-    float branchLen = height * 0.25f;
-    float branchRad = trunkRadius * 0.6f;
-    
-    // Branch 1 - going up-right
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x + branchLen * 0.3f, branchY + branchLen * 0.3f, position.z - spread * 0.1f),
-             glm::vec3(branchLen, branchRad * 1.5f, branchRad * 1.5f), glm::vec3(0, 0, -40),
-             barkMid, 0, 0.1f, 0.55f, 0.1f, 6.0f);
-    
-    // Branch 2 - going up-left
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x - branchLen * 0.25f, branchY + branchLen * 0.35f, position.z + spread * 0.15f),
-             glm::vec3(branchLen * 0.9f, branchRad * 1.4f, branchRad * 1.4f), glm::vec3(0, 0, 35),
-             barkDark, 0, 0.1f, 0.55f, 0.1f, 6.0f);
-    
-    // Branch 3 - going forward
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x, branchY + branchLen * 0.2f, position.z + branchLen * 0.3f),
-             glm::vec3(branchRad * 1.3f, branchRad * 1.3f, branchLen * 0.8f), glm::vec3(30, 0, 0),
-             barkMid, 0, 0.1f, 0.55f, 0.1f, 6.0f);
-    
-    // Branch 4 - going backward
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x + spread * 0.1f, branchY + branchLen * 0.15f, position.z - branchLen * 0.35f),
-             glm::vec3(branchRad * 1.2f, branchRad * 1.2f, branchLen * 0.7f), glm::vec3(-25, 10, 0),
-             barkLight, 0, 0.1f, 0.55f, 0.1f, 6.0f);
-    
-    // === SECONDARY BRANCHES (smaller, extending outward) ===
-    float secBranchLen = branchLen * 0.5f;
-    float secBranchRad = branchRad * 0.5f;
-    
-    // Multiple smaller branches
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x + spread * 0.4f, branchY + height * 0.15f, position.z),
-             glm::vec3(secBranchLen, secBranchRad, secBranchRad), glm::vec3(0, 0, -50),
-             barkDark, 0, 0.1f, 0.5f, 0.1f, 6.0f);
-    drawCubeRotated(shader, cubeVAO, glm::vec3(position.x - spread * 0.35f, branchY + height * 0.18f, position.z + spread * 0.2f),
-             glm::vec3(secBranchLen * 0.9f, secBranchRad, secBranchRad), glm::vec3(0, 20, 45),
-             barkMid, 0, 0.1f, 0.5f, 0.1f, 6.0f);
-    
-    // === FOLIAGE CLUSTERS (organic, irregular shapes like reference) ===
-    float foliageY = branchY + branchLen * 0.2f;
-    float clusterSize = spread * 0.45f;
-    
-    // Main central canopy cluster
-    drawCube(shader, cubeVAO, glm::vec3(position.x, foliageY + height * 0.2f, position.z),
-             glm::vec3(clusterSize * 1.4f, clusterSize * 0.9f, clusterSize * 1.4f), leafMid, 0, 0.18f, 0.7f, 0.08f, 4.0f);
-    
-    // Overlapping clusters for organic look
-    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.35f, foliageY + height * 0.12f, position.z - spread * 0.1f),
-             glm::vec3(clusterSize * 1.1f, clusterSize * 0.7f, clusterSize * 1.0f), leafLight, 0, 0.2f, 0.72f, 0.08f, 4.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x - spread * 0.3f, foliageY + height * 0.15f, position.z + spread * 0.25f),
-             glm::vec3(clusterSize * 1.2f, clusterSize * 0.75f, clusterSize * 1.1f), leafDark, 0, 0.15f, 0.65f, 0.08f, 4.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.1f, foliageY + height * 0.28f, position.z - spread * 0.2f),
-             glm::vec3(clusterSize * 0.9f, clusterSize * 0.65f, clusterSize * 0.9f), leafBright, 0, 0.22f, 0.75f, 0.1f, 4.0f);
-    
-    // Side clusters (hanging foliage)
-    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.5f, foliageY + height * 0.05f, position.z + spread * 0.15f),
-             glm::vec3(clusterSize * 0.8f, clusterSize * 0.5f, clusterSize * 0.7f), leafMid, 0, 0.18f, 0.68f, 0.08f, 4.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x - spread * 0.45f, foliageY + height * 0.08f, position.z - spread * 0.2f),
-             glm::vec3(clusterSize * 0.75f, clusterSize * 0.55f, clusterSize * 0.8f), leafLight, 0, 0.2f, 0.7f, 0.08f, 4.0f);
-    
-    // Forward/backward clusters
-    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.15f, foliageY + height * 0.1f, position.z + spread * 0.45f),
-             glm::vec3(clusterSize * 0.9f, clusterSize * 0.6f, clusterSize * 0.85f), leafDark, 0, 0.16f, 0.66f, 0.08f, 4.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x - spread * 0.1f, foliageY + height * 0.18f, position.z - spread * 0.4f),
-             glm::vec3(clusterSize * 0.85f, clusterSize * 0.6f, clusterSize * 0.9f), leafBright, 0, 0.2f, 0.72f, 0.1f, 4.0f);
-    
-    // Top crown clusters
-    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.08f, foliageY + height * 0.35f, position.z + spread * 0.05f),
-             glm::vec3(clusterSize * 0.7f, clusterSize * 0.5f, clusterSize * 0.7f), leafLight, 0, 0.22f, 0.75f, 0.1f, 4.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x - spread * 0.12f, foliageY + height * 0.32f, position.z - spread * 0.08f),
-             glm::vec3(clusterSize * 0.6f, clusterSize * 0.45f, clusterSize * 0.65f), leafBright, 0, 0.24f, 0.78f, 0.1f, 4.0f);
-    
-    // Small detail clusters for organic texture
-    drawCube(shader, cubeVAO, glm::vec3(position.x + spread * 0.55f, foliageY + height * 0.02f, position.z - spread * 0.05f),
-             glm::vec3(clusterSize * 0.4f, clusterSize * 0.35f, clusterSize * 0.4f), leafMid, 0, 0.18f, 0.68f, 0.08f, 4.0f);
-    drawCube(shader, cubeVAO, glm::vec3(position.x - spread * 0.5f, foliageY + height * 0.05f, position.z + spread * 0.1f),
-             glm::vec3(clusterSize * 0.45f, clusterSize * 0.35f, clusterSize * 0.45f), leafDark, 0, 0.15f, 0.62f, 0.08f, 4.0f);
+    FractalTree::Style style = FractalTree::makeGroundGateStyle();
+    int maxDepth = 3 + (height > 8.5f ? 1 : 0);
+    float trunkLength = std::max(0.95f, height * 0.36f);
+    float trunkRadius = std::max(0.09f, spread * 0.08f);
+
+    FractalTree::drawFractalTree(shader,
+                                 cubeVAO,
+                                 cylVAO,
+                                 16,
+                                 0,
+                                 0,
+                                 position,
+                                 maxDepth,
+                                 trunkLength,
+                                 trunkRadius,
+                                 style,
+                                 position.x * 0.21f + position.z * 0.13f);
 }
 
 // Draw the outdoor environment: road, ground, sky, trees

@@ -13,6 +13,7 @@
 
 #include "shader.h"
 #include "npc.h"
+#include "tree.h"
 
 void drawCube(Shader& shader, unsigned int VAO, glm::vec3 position, glm::vec3 scale,
               glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess);
@@ -774,97 +775,25 @@ inline void drawFashionOutlet(glm::vec3 position, glm::vec2 size, float rotation
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  drawAtriumAndBalustrade  (unchanged logic, uses upgraded hollow mesh)
+//  Shared fractal tree wrapper for first-floor atrium
 // ─────────────────────────────────────────────────────────────────────────────
-inline void drawFractalBranch(glm::mat4 parentMatrix, int depth, float length, float radius) {
-    RenderContext& c = ctx();
-    if (!c.shader || c.cylVAO == 0) return;
-    Shader& shader = *c.shader;
-
-    if (depth == 0) {
-        float seed = std::sin(parentMatrix[3].x * 0.37f + parentMatrix[3].z * 0.73f);
-        glm::vec3 canopyColor = (seed > 0.0f)
-            ? glm::vec3(0.95f, 0.52f, 0.72f)   // cherry blossom pink
-            : glm::vec3(0.36f, 0.78f, 0.34f);  // vibrant leaf green
-
-        if (c.sphereVAO != 0 && c.sphereCount > 0) {
-            const glm::vec3 offs[3] = {
-                glm::vec3(0.00f, 0.12f, 0.00f),
-                glm::vec3(0.11f, 0.04f, 0.05f),
-                glm::vec3(-0.10f, 0.06f, -0.05f)
-            };
-            for (int i = 0; i < 3; ++i) {
-                glm::mat4 leaf = glm::translate(parentMatrix, offs[i]);
-                leaf = glm::scale(leaf, glm::vec3(0.20f + 0.03f * i));
-                shader.setMat4("model", leaf);
-                shader.setVec3("objectColor", canopyColor);
-                shader.setInt("textureType", 0);
-                shader.setFloat("ambientStrength", 0.22f);
-                shader.setFloat("diffuseStrength", 0.72f);
-                shader.setFloat("specularStrength", 0.10f);
-                shader.setFloat("shininess", 14.0f);
-                shader.setFloat("objectAlpha", 1.0f);
-                glBindVertexArray(c.sphereVAO);
-                glDrawElements(GL_TRIANGLES, c.sphereCount, GL_UNSIGNED_INT, 0);
-            }
-        } else if (c.cubeVAO != 0) {
-            glm::mat4 leaf = glm::translate(parentMatrix, glm::vec3(0.0f, 0.10f, 0.0f));
-            leaf = glm::scale(leaf, glm::vec3(0.22f, 0.16f, 0.22f));
-            shader.setMat4("model", leaf);
-            shader.setVec3("objectColor", canopyColor);
-            shader.setInt("textureType", 0);
-            shader.setFloat("ambientStrength", 0.22f);
-            shader.setFloat("diffuseStrength", 0.72f);
-            shader.setFloat("specularStrength", 0.10f);
-            shader.setFloat("shininess", 14.0f);
-            shader.setFloat("objectAlpha", 1.0f);
-            glBindVertexArray(c.cubeVAO);
-            glDrawArrays(GL_TRIANGLES, 0, 36);
-        }
-        return;
-    }
-
-    // Current branch segment
-    glm::mat4 branchModel = glm::translate(parentMatrix, glm::vec3(0.0f, length * 0.5f, 0.0f));
-    branchModel = glm::scale(branchModel, glm::vec3(radius, length, radius));
-
-    shader.setMat4("model", branchModel);
-    shader.setVec3("objectColor", glm::vec3(0.25f, 0.14f, 0.08f)); // dark brown wood
-    shader.setInt("textureType", 0);
-    shader.setFloat("ambientStrength", 0.18f);
-    shader.setFloat("diffuseStrength", 0.68f);
-    shader.setFloat("specularStrength", 0.10f);
-    shader.setFloat("shininess", 12.0f);
-    shader.setFloat("objectAlpha", 1.0f);
-    glBindVertexArray(c.cylVAO);
-    glDrawArrays(GL_TRIANGLES, 0, c.cylSegments * 12);
-
-    // Tip of current branch
-    glm::mat4 tipMatrix = glm::translate(parentMatrix, glm::vec3(0.0f, length, 0.0f));
-
-    // 3D radial branch split
-    const int numBranches = 3;
-    for (int i = 0; i < numBranches; ++i) {
-        glm::mat4 child = tipMatrix;
-        float yawDeg = (360.0f / (float)numBranches) * (float)i;
-        child = glm::rotate(child, glm::radians(yawDeg), glm::vec3(0.0f, 1.0f, 0.0f));
-        child = glm::rotate(child, glm::radians(34.0f + 4.0f * ((i + depth) % 2)), glm::vec3(0.0f, 0.0f, 1.0f));
-        drawFractalBranch(child, depth - 1, length * 0.75f, radius * 0.65f);
-    }
-}
-
 inline void drawFractalTree(glm::vec3 rootPosition) {
     RenderContext& c = ctx();
     if (!c.shader || c.cylVAO == 0) return;
 
-    // Hard safety limits to control recursion cost and keep below floor height.
-    const int maxDepth = 5;
-    const float trunkLength = 1.45f;
-    const float trunkRadius = 0.22f;
-
-    glm::mat4 rootMatrix = glm::mat4(1.0f);
-    rootMatrix = glm::translate(rootMatrix, rootPosition);
-    drawFractalBranch(rootMatrix, maxDepth, trunkLength, trunkRadius);
+    FractalTree::Style style = FractalTree::makeAtriumStyle();
+    FractalTree::drawFractalTree(*c.shader,
+                                 c.cubeVAO,
+                                 c.cylVAO,
+                                 c.cylSegments,
+                                 c.sphereVAO,
+                                 c.sphereCount,
+                                 rootPosition,
+                                 5,
+                                 1.45f,
+                                 0.22f,
+                                 style,
+                                 1.7f);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
