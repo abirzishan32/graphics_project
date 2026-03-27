@@ -419,6 +419,7 @@ int main()
         
         // Update second floor NPC animations and AI behaviors
         SecondFloorDesign::updateNPCs(deltaTime, 2.0f * FLOOR_TO_FLOOR_HEIGHT);
+        FirstFloorDesign::updateNPCs(deltaTime, 1.0f * FLOOR_TO_FLOOR_HEIGHT);
 
         // Get actual framebuffer size for High-DPI displays (Mac)
         int display_w, display_h;

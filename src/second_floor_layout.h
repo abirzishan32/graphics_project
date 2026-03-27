@@ -9,6 +9,7 @@
 #include <cmath>
 
 #include "shader.h"
+#include "npc.h"
 
 // External helper functions assumed to be defined elsewhere (e.g. main.cpp or a utils file)
 extern void drawCube(Shader& shader, unsigned int VAO, glm::vec3 position, glm::vec3 scale,
@@ -430,8 +431,6 @@ inline void drawCinemaChair(glm::vec3 position, float rotationDeg) {
 
 enum class NPCState { WANDERING, IN_LINE, TAKING_PICTURE, SELLING, FINDING_SEAT, SITTING };
 
-enum Gender { MALE, FEMALE };
-
 struct Seat {
     glm::vec3 position;
     float rotationY;
@@ -499,17 +498,8 @@ inline void updateWashroom(float deltaTime) {
     }
 }
 
-struct NPC {
-    glm::vec3 position;
-    glm::vec3 targetPosition;
-    float rotationY;
-    float speed;
-    float walkCycleTime;
+struct NPC : public NPCShared::NPC {
     NPCState state;
-    Gender gender;
-    glm::vec3 clothingColor;
-    float flashTimer;
-    float waitTimer;
     std::vector<glm::vec3> path;
     int assignedSeatIndex = -1;
 };
@@ -525,14 +515,14 @@ inline void initNPCs(float floorY) {
     const int salesmanCount = 1;
     const int totalCrowd = wanderingCount + lineCount + photographerCount + salesmanCount;
 
-    std::vector<Gender> genderPool;
+    std::vector<NPCShared::Gender> genderPool;
     genderPool.reserve(totalCrowd);
     for (int i = 0; i < totalCrowd; ++i) {
-        genderPool.push_back(i < totalCrowd / 2 ? MALE : FEMALE);
+        genderPool.push_back(i < totalCrowd / 2 ? NPCShared::MALE : NPCShared::FEMALE);
     }
     for (int i = totalCrowd - 1; i > 0; --i) {
         int j = rand() % (i + 1);
-        Gender tmp = genderPool[i];
+        NPCShared::Gender tmp = genderPool[i];
         genderPool[i] = genderPool[j];
         genderPool[j] = tmp;
     }
@@ -767,212 +757,17 @@ inline void updateNPCs(float deltaTime, float floorY) {
 inline void drawProceduralNPC(NPC& npc, float walkCycleTime) {
     RenderContext& c = ctx();
     if (!c.shader || c.cubeVAO == 0 || c.cylVAO == 0 || c.sphereVAO == 0) return;
-    Shader& shader = *c.shader;
+    npc.walkCycleTime = walkCycleTime;
 
-    glm::vec3 position = npc.position;
-    float rotationY = npc.rotationY;
-    float cycle = walkCycleTime;
-    float flashPhase = npc.flashTimer;
-    NPCState state = npc.state;
-    bool isFemale = (npc.gender == FEMALE);
-    
-    glm::vec3 skinColor(0.85f, 0.65f, 0.5f);
-    glm::vec3 shirtColor = npc.clothingColor;
-    glm::vec3 pantsColor(0.1f, 0.1f, 0.15f);
-    glm::vec3 shoeColor(0.05f, 0.05f, 0.05f);
-    
-    // Adjust colors for salesman
-    if (state == NPCState::SELLING) {
-        shirtColor = glm::mix(npc.clothingColor, glm::vec3(0.85f, 0.15f, 0.15f), 0.5f);
-        pantsColor = glm::vec3(0.9f, 0.9f, 0.9f);   // White pants
-    }
-    
-    // Root transformation (Position and Yaw)
-    glm::mat4 root = glm::mat4(1.0f);
-    root = glm::translate(root, position);
-    root = glm::rotate(root, glm::radians(rotationY), glm::vec3(0.0f, 1.0f, 0.0f));
-    
-    // Mathematical swing logic
-    float swing = std::sin(cycle); 
-    float swingCos = std::cos(cycle); // For bouncy walk vertically
-    
-    float hipL = swing * 30.0f;
-    float hipR = -swing * 30.0f;
-    float kneeL = std::max(0.0f, -swing) * 40.0f;
-    float kneeR = std::max(0.0f, swing) * 40.0f;
-    
-    float shoulderL = -swing * 25.0f;
-    float shoulderR = swing * 25.0f;
-    float elbowL = std::max(0.0f, -swing) * 20.0f + 5.0f;
-    float elbowR = std::max(0.0f, swing) * 20.0f + 5.0f;
-    
-    float pelvicBounce = (state == NPCState::WANDERING) ? std::abs(swingCos) * 0.05f : 0.0f;
+    NPCShared::DrawParams params;
+    params.sitting = (npc.state == NPCState::SITTING);
+    params.selling = (npc.state == NPCState::SELLING);
+    params.enableCameraFlash = (npc.state == NPCState::TAKING_PICTURE && npc.flashTimer > 2.85f);
+    params.flashLightIndex = 31;
+    params.sitOffsetY = -0.4f;
+    params.sitOffsetZ = 0.25f;
 
-    // Special animation overrides for the Salesman (Scooping)
-    if (state == NPCState::SELLING) {
-        hipL = 0; hipR = 0; kneeL = 0; kneeR = 0; pelvicBounce = 0;
-        shoulderL = 10.0f + std::sin(cycle * 0.5f) * 15.0f; // Continuous sweeping
-        shoulderR = 25.0f + std::cos(cycle) * 20.0f;        // Sharp scooping
-        elbowL = 40.0f + std::sin(cycle * 0.5f) * 5.0f;
-        elbowR = 30.0f + std::cos(cycle) * 10.0f;
-    }
-    
-    // Seat position offset helper
-    auto sOff = [&](float x, float y, float z) {
-        float sRy = glm::radians(rotationY);
-        return glm::vec3(std::cos(sRy)*x + std::sin(sRy)*z, y, -std::sin(sRy)*x + std::cos(sRy)*z);
-    };
-
-    // Special cinematic overrides for Sitting Posture
-    if (state == NPCState::SITTING) {
-        hipL = -90.0f; hipR = -90.0f;
-        kneeL = 90.0f;  kneeR = 90.0f;
-        shoulderL = -15.0f; shoulderR = -15.0f;
-        elbowL = 60.0f;  elbowR = 60.0f;
-        pelvicBounce = 0.0f;
-        // Move backwards and down firmly into the plush cushion
-        root = glm::translate(root, sOff(0.0f, -0.4f, 0.25f)); 
-    }
-
-    // --- 1. PELVIS (Anchor point for legs and spine) ---
-    float pelvisY = 0.9f + pelvicBounce;
-    glm::mat4 pelvisM = glm::translate(root, glm::vec3(0.0f, pelvisY, 0.0f));
-    
-    // --- 2. LOWER LIMBS (Thigh -> Calf -> Shoe) ---
-    auto drawLeg = [&](int side, float hipFlex, float kneeFlex) {
-        float dirMultiplier = (side == 0) ? -1.0f : 1.0f; // Left=0, Right=1
-        
-        // Thigh
-        glm::mat4 thighM = glm::translate(pelvisM, glm::vec3(0.12f * dirMultiplier, -0.05f, 0.0f)); 
-        thighM = glm::rotate(thighM, glm::radians(hipFlex), glm::vec3(1.0f, 0.0f, 0.0f));
-        glm::mat4 drawThigh = glm::translate(thighM, glm::vec3(0.0f, -0.2f, 0.0f)); // Draw relative to pivot
-        drawThigh = glm::scale(drawThigh, glm::vec3(0.16f, 0.4f, 0.16f));
-        shader.setMat4("model", drawThigh);
-        shader.setVec3("objectColor", pantsColor);
-        glBindVertexArray(c.cylVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
-        
-        // Calf
-        glm::mat4 calfM = glm::translate(thighM, glm::vec3(0.0f, -0.4f, 0.0f));
-        calfM = glm::rotate(calfM, glm::radians(kneeFlex), glm::vec3(1.0f, 0.0f, 0.0f)); // Knee rotates backwards (+X)
-        glm::mat4 drawCalf = glm::translate(calfM, glm::vec3(0.0f, -0.2f, 0.0f));
-        drawCalf = glm::scale(drawCalf, glm::vec3(0.12f, 0.4f, 0.12f));
-        shader.setMat4("model", drawCalf);
-        glBindVertexArray(c.cylVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
-        
-        // Shoe
-        glm::mat4 shoeM = glm::translate(calfM, glm::vec3(0.0f, -0.42f, 0.06f));
-        shoeM = glm::scale(shoeM, glm::vec3(0.14f, 0.08f, 0.25f));
-        shader.setMat4("model", shoeM);
-        shader.setVec3("objectColor", shoeColor);
-        glBindVertexArray(c.cubeVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-    };
-    if (!isFemale) {
-        drawLeg(0, hipL, kneeL); // Left leg
-        drawLeg(1, hipR, kneeR); // Right leg
-    } else {
-        drawLeg(0, hipL * 0.8f, kneeL * 0.6f);
-        drawLeg(1, hipR * 0.8f, kneeR * 0.6f);
-    }
-    
-    // --- 3. UPPER TORSO (Spine -> Chest) ---
-    glm::mat4 torsoM = glm::translate(pelvisM, glm::vec3(0.0f, 0.0f, 0.0f));
-    glm::mat4 drawTorso = glm::translate(torsoM, glm::vec3(0.0f, 0.35f, 0.0f));
-    drawTorso = glm::scale(drawTorso, isFemale ? glm::vec3(0.30f, 0.65f, 0.19f) : glm::vec3(0.35f, 0.7f, 0.2f));
-    shader.setMat4("model", drawTorso);
-    shader.setVec3("objectColor", shirtColor);
-    glBindVertexArray(c.cubeVAO);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-
-    if (isFemale) {
-        // Flared lower dress built from stacked cylinders for a tapered silhouette
-        for (int seg = 0; seg < 3; ++seg) {
-            float t = seg / 2.0f;
-            float segY = 0.20f - t * 0.28f;
-            float radius = 0.20f + t * 0.12f;
-            glm::mat4 dressM = glm::translate(torsoM, glm::vec3(0.0f, segY, 0.0f));
-            dressM = glm::scale(dressM, glm::vec3(radius, 0.24f, radius));
-            shader.setMat4("model", dressM);
-            shader.setVec3("objectColor", glm::mix(shirtColor, glm::vec3(0.95f), 0.08f));
-            glBindVertexArray(c.cylVAO);
-            glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
-        }
-    }
-    
-    // --- 4. UPPER LIMBS (Shoulder -> Upper Arm -> Lower Arm -> Hand) ---
-    auto drawArm = [&](int side, float shoulderFlex, float elbowFlex) {
-        float dirMultiplier = (side == 0) ? -1.0f : 1.0f; 
-        float shoulderWidth = isFemale ? 0.20f : 0.24f;
-        
-        // Upper Arm
-        glm::mat4 uArmM = glm::translate(torsoM, glm::vec3(shoulderWidth * dirMultiplier, 0.58f, 0.0f)); // Shoulder pivot
-        uArmM = glm::rotate(uArmM, glm::radians(shoulderFlex), glm::vec3(1.0f, 0.0f, 0.0f));
-        glm::mat4 drawUArm = glm::translate(uArmM, glm::vec3(0.0f, -0.15f, 0.0f)); 
-        drawUArm = glm::scale(drawUArm, isFemale ? glm::vec3(0.10f, 0.28f, 0.10f) : glm::vec3(0.12f, 0.3f, 0.12f));
-        shader.setMat4("model", drawUArm);
-        shader.setVec3("objectColor", shirtColor); // Sleeve
-        glBindVertexArray(c.cylVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
-        
-        // Lower Arm
-        glm::mat4 lArmM = glm::translate(uArmM, glm::vec3(0.0f, -0.3f, 0.0f)); // Elbow pivot
-        lArmM = glm::rotate(lArmM, glm::radians(-elbowFlex), glm::vec3(1.0f, 0.0f, 0.0f)); // Elbow rotates forward (-X)
-        glm::mat4 drawLArm = glm::translate(lArmM, glm::vec3(0.0f, -0.15f, 0.0f));
-        drawLArm = glm::scale(drawLArm, glm::vec3(0.1f, 0.3f, 0.1f));
-        shader.setMat4("model", drawLArm);
-        shader.setVec3("objectColor", skinColor);
-        glBindVertexArray(c.cylVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
-        
-        // Hand
-        glm::mat4 handM = glm::translate(lArmM, glm::vec3(0.0f, -0.35f, 0.0f));
-        handM = glm::scale(handM, glm::vec3(0.08f, 0.12f, 0.12f));
-        shader.setMat4("model", handM);
-        shader.setVec3("objectColor", skinColor);
-        glBindVertexArray(c.sphereVAO);
-        glDrawElements(GL_TRIANGLES, c.sphereCount, GL_UNSIGNED_INT, 0);
-    };
-    drawArm(0, shoulderL, elbowL); // Left arm
-    drawArm(1, shoulderR, elbowR); // Right arm
-    
-    // --- 5. HEAD and NECK ---
-    // Neck
-    glm::mat4 neckM = glm::translate(torsoM, glm::vec3(0.0f, 0.75f, 0.0f));
-    glm::mat4 drawNeck = glm::scale(neckM, glm::vec3(0.1f, 0.1f, 0.1f));
-    shader.setMat4("model", drawNeck);
-    shader.setVec3("objectColor", skinColor);
-    glBindVertexArray(c.cylVAO);
-    glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
-    
-    // Head using cubeVAO (so the Front Face gets the UV properly)
-    glm::mat4 headM = glm::translate(neckM, glm::vec3(0.0f, 0.15f, 0.0f));
-    headM = glm::scale(headM, glm::vec3(0.22f, 0.25f, 0.22f));
-    shader.setMat4("model", headM);
-    // Explicitly enforce useTexture = 1 if user bound a literal face texture
-    // For now we allow procedural skin if no texture is bound
-    shader.setVec3("objectColor", skinColor);
-    glBindVertexArray(c.cubeVAO);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-
-    if (isFemale) {
-        // Long hair volume at back of head (elongated sphere/ellipsoid)
-        glm::mat4 hairM = glm::translate(neckM, glm::vec3(0.0f, 0.12f, -0.15f));
-        hairM = glm::scale(hairM, glm::vec3(0.24f, 0.36f, 0.18f));
-        shader.setMat4("model", hairM);
-        shader.setVec3("objectColor", glm::vec3(0.16f, 0.10f, 0.05f));
-        glBindVertexArray(c.sphereVAO);
-        glDrawElements(GL_TRIANGLES, c.sphereCount, GL_UNSIGNED_INT, 0);
-    }
-    
-    // --- 6. CAMERA FLASH (Photographers only) ---
-    if (state == NPCState::TAKING_PICTURE && flashPhase > 2.85f) { 
-        shader.setVec3("pointLights[31].position", position + glm::vec3(0.0f, 1.5f, 0.0f));
-        shader.setVec3("pointLights[31].ambient", glm::vec3(0.5f));
-        shader.setVec3("pointLights[31].diffuse", glm::vec3(5.0f, 5.0f, 6.0f)); // Bright blue-white flash
-        shader.setVec3("pointLights[31].specular", glm::vec3(4.0f));
-    }
+    NPCShared::drawNPC(*c.shader, c.cubeVAO, c.cylVAO, c.sphereVAO, c.sphereCount, npc, params, 16);
 }
 inline void drawBasin(glm::vec3 position) {
     RenderContext& c = ctx();

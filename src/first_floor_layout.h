@@ -9,8 +9,10 @@
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#include <cstdlib>
 
 #include "shader.h"
+#include "npc.h"
 
 void drawCube(Shader& shader, unsigned int VAO, glm::vec3 position, glm::vec3 scale,
               glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess);
@@ -162,10 +164,10 @@ inline void buildAtriumFloorMesh(float halfExtent, float innerRadius, int segmen
     };
 
     for (int i = 0; i < segments; ++i) {
-        auto [uo, vo] = uvOf(outerPts[i].x, outerPts[i].z);
-        auto [ui, vi] = uvOf(innerPts[i].x, innerPts[i].z);
-        pushVert(verts, outerPts[i].x, outerPts[i].z, 0, 1, 0, uo, vo); // even = outer
-        pushVert(verts, innerPts[i].x, innerPts[i].z, 0, 1, 0, ui, vi); // odd  = inner
+        std::pair<float, float> uvOuter = uvOf(outerPts[i].x, outerPts[i].z);
+        std::pair<float, float> uvInner = uvOf(innerPts[i].x, innerPts[i].z);
+        pushVert(verts, outerPts[i].x, outerPts[i].z, 0, 1, 0, uvOuter.first, uvOuter.second); // even = outer
+        pushVert(verts, innerPts[i].x, innerPts[i].z, 0, 1, 0, uvInner.first, uvInner.second); // odd  = inner
     }
 
     // Ring-strip indices (no triangles inside circle)
@@ -195,9 +197,9 @@ inline void buildAtriumFloorMesh(float halfExtent, float innerRadius, int segmen
 
     for (int ci = 0; ci < 4; ++ci) {
         // Push the corner vertex
-        auto [uc, vc] = uvOf(corners[ci].cx, corners[ci].cz);
+        std::pair<float, float> uvCorner = uvOf(corners[ci].cx, corners[ci].cz);
         unsigned int cornerIdx = (unsigned int)(verts.size() / 8);
-        pushVert(verts, corners[ci].cx, corners[ci].cz, 0, 1, 0, uc, vc);
+        pushVert(verts, corners[ci].cx, corners[ci].cz, 0, 1, 0, uvCorner.first, uvCorner.second);
 
         // Collect outer ring indices in this corner's 90° sector
         // Sector: angles within π/4 of the bisector
@@ -1146,6 +1148,224 @@ inline void drawAtriumCenterpiece(float floorY) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Entry point
 // ─────────────────────────────────────────────────────────────────────────────
+enum class NPCState {
+    WANDERING,
+    TO_BENCH,
+    SITTING,
+    TO_OUTLET,
+    INSIDE_OUTLET
+};
+
+struct FirstFloorNPC {
+    NPCShared::NPC actor;
+    NPCState state = NPCState::WANDERING;
+    int benchIndex = -1;
+    int outletIndex = -1;
+    float stateTimer = 0.0f;
+    bool visible = true;
+};
+
+inline std::vector<FirstFloorNPC>& firstFloorNPCs() {
+    static std::vector<FirstFloorNPC> crowd;
+    return crowd;
+}
+
+inline bool* firstFloorBenchOccupied() {
+    static bool occupied[4] = { false, false, false, false };
+    return occupied;
+}
+
+inline glm::vec3 randomFirstFloorTarget(float floorY) {
+    const float minX = 10.0f;
+    const float maxX = 130.0f;
+    const float minZ = 10.0f;
+    const float maxZ = 90.0f;
+    const glm::vec2 atriumCenter(70.0f, 50.0f);
+
+    for (int tries = 0; tries < 80; ++tries) {
+        float x = minX + ((std::rand() % 10000) / 10000.0f) * (maxX - minX);
+        float z = minZ + ((std::rand() % 10000) / 10000.0f) * (maxZ - minZ);
+        float d = glm::distance(glm::vec2(x, z), atriumCenter);
+        if (d > 14.0f) {
+            return glm::vec3(x, floorY, z);
+        }
+    }
+    return glm::vec3(70.0f, floorY, 75.0f);
+}
+
+inline glm::vec3 getBenchSitPosition(int index, float floorY) {
+    float ang = glm::two_pi<float>() * (float)index / 4.0f;
+    float r = 5.5f;
+    float x = 70.0f + std::cos(ang) * r;
+    float z = 50.0f + std::sin(ang) * r;
+    float yaw = glm::degrees(ang) + 90.0f;
+    return glm::vec3(x, floorY + 0.18f, z) + rotateY(glm::vec3(0.0f, 0.0f, 0.05f), yaw);
+}
+
+inline float getBenchYaw(int index) {
+    float ang = glm::two_pi<float>() * (float)index / 4.0f;
+    return glm::degrees(ang) + 90.0f;
+}
+
+inline glm::vec3 getOutletEntryPosition(int index, float floorY) {
+    static const glm::vec2 entries[4] = {
+        glm::vec2(35.0f, 23.0f),
+        glm::vec2(104.0f, 26.0f),
+        glm::vec2(34.0f, 86.0f),
+        glm::vec2(104.0f, 86.0f)
+    };
+    int i = std::max(0, std::min(index, 3));
+    return glm::vec3(entries[i].x, floorY, entries[i].y);
+}
+
+inline glm::vec3 randomBrightApparel() {
+    float r = 0.25f + ((std::rand() % 100) / 100.0f) * 0.75f;
+    float g = 0.25f + ((std::rand() % 100) / 100.0f) * 0.75f;
+    float b = 0.25f + ((std::rand() % 100) / 100.0f) * 0.75f;
+    float mx = std::max(r, std::max(g, b));
+    if (mx < 0.65f) {
+        float k = 0.65f - mx;
+        r = std::min(1.0f, r + k);
+        g = std::min(1.0f, g + k);
+        b = std::min(1.0f, b + k);
+    }
+    return glm::vec3(r, g, b);
+}
+
+inline void initNPCs(float floorY) {
+    std::vector<FirstFloorNPC>& crowd = firstFloorNPCs();
+    if (!crowd.empty()) return;
+
+    const int npcCount = 24;
+    crowd.reserve(npcCount);
+
+    for (int i = 0; i < npcCount; ++i) {
+        FirstFloorNPC npc;
+        npc.actor.position = randomFirstFloorTarget(floorY);
+        npc.actor.targetPosition = randomFirstFloorTarget(floorY);
+        glm::vec3 d = npc.actor.targetPosition - npc.actor.position;
+        npc.actor.rotationY = glm::degrees(std::atan2(d.x, d.z));
+        npc.actor.speed = 0.9f + ((std::rand() % 100) / 100.0f) * 0.7f;
+        npc.actor.walkCycleTime = (std::rand() % 1000) / 90.0f;
+        npc.actor.gender = (std::rand() % 2 == 0) ? NPCShared::MALE : NPCShared::FEMALE;
+        npc.actor.clothingColor = randomBrightApparel();
+        crowd.push_back(npc);
+    }
+}
+
+inline void updateNPCs(float deltaTime, float floorY) {
+    std::vector<FirstFloorNPC>& crowd = firstFloorNPCs();
+    if (crowd.empty()) initNPCs(floorY);
+
+    bool* benchOccupied = firstFloorBenchOccupied();
+
+    for (auto& npc : crowd) {
+        if (npc.state == NPCState::INSIDE_OUTLET) {
+            npc.stateTimer -= deltaTime;
+            if (npc.stateTimer <= 0.0f) {
+                npc.visible = true;
+                npc.state = NPCState::WANDERING;
+                npc.actor.position = getOutletEntryPosition(npc.outletIndex, floorY);
+                npc.actor.targetPosition = randomFirstFloorTarget(floorY);
+                npc.outletIndex = -1;
+            }
+            continue;
+        }
+
+        if (npc.state == NPCState::SITTING) {
+            npc.stateTimer -= deltaTime;
+            npc.actor.walkCycleTime = 0.0f;
+            if (npc.stateTimer <= 0.0f) {
+                if (npc.benchIndex >= 0 && npc.benchIndex < 4) benchOccupied[npc.benchIndex] = false;
+                npc.benchIndex = -1;
+                npc.state = NPCState::WANDERING;
+                npc.actor.targetPosition = randomFirstFloorTarget(floorY);
+            }
+            continue;
+        }
+
+        glm::vec3 dir = npc.actor.targetPosition - npc.actor.position;
+        dir.y = 0.0f;
+        float dist = glm::length(dir);
+
+        if (dist > 0.12f) {
+            dir = glm::normalize(dir);
+            npc.actor.position += dir * npc.actor.speed * deltaTime;
+            npc.actor.rotationY = glm::degrees(std::atan2(dir.x, dir.z));
+            npc.actor.walkCycleTime += deltaTime * npc.actor.speed * 4.0f;
+            continue;
+        }
+
+        if (npc.state == NPCState::TO_BENCH && npc.benchIndex >= 0 && npc.benchIndex < 4) {
+            npc.state = NPCState::SITTING;
+            npc.actor.position = getBenchSitPosition(npc.benchIndex, floorY);
+            npc.actor.rotationY = getBenchYaw(npc.benchIndex);
+            npc.stateTimer = 6.0f + ((std::rand() % 400) / 100.0f);
+            continue;
+        }
+
+        if (npc.state == NPCState::TO_OUTLET) {
+            npc.state = NPCState::INSIDE_OUTLET;
+            npc.visible = false;
+            npc.stateTimer = 4.0f + ((std::rand() % 600) / 100.0f);
+            continue;
+        }
+
+        int roll = std::rand() % 100;
+        if (roll < 25) {
+            int freeBench = -1;
+            for (int b = 0; b < 4; ++b) {
+                if (!benchOccupied[b]) {
+                    freeBench = b;
+                    break;
+                }
+            }
+            if (freeBench != -1) {
+                benchOccupied[freeBench] = true;
+                npc.benchIndex = freeBench;
+                npc.state = NPCState::TO_BENCH;
+                npc.actor.targetPosition = getBenchSitPosition(freeBench, floorY);
+                continue;
+            }
+        }
+
+        if (roll >= 25 && roll < 55) {
+            npc.outletIndex = std::rand() % 4;
+            npc.state = NPCState::TO_OUTLET;
+            npc.actor.targetPosition = getOutletEntryPosition(npc.outletIndex, floorY);
+            continue;
+        }
+
+        npc.state = NPCState::WANDERING;
+        npc.actor.targetPosition = randomFirstFloorTarget(floorY);
+    }
+}
+
+inline void drawNPC(const FirstFloorNPC& npc) {
+    if (!npc.visible) return;
+
+    RenderContext& c = ctx();
+    if (!c.shader || c.cubeVAO == 0 || c.cylVAO == 0 || c.sphereVAO == 0) return;
+
+    NPCShared::DrawParams params;
+    params.sitting = (npc.state == NPCState::SITTING);
+    params.selling = false;
+    params.enableCameraFlash = false;
+    params.flashLightIndex = 31;
+    params.sitOffsetY = -0.10f;
+    params.sitOffsetZ = 0.10f;
+
+    NPCShared::drawNPC(*c.shader, c.cubeVAO, c.cylVAO, c.sphereVAO, c.sphereCount, npc.actor, params, c.cylSegments);
+}
+
+inline void drawNPCs(float floorY) {
+    std::vector<FirstFloorNPC>& crowd = firstFloorNPCs();
+    if (crowd.empty()) initNPCs(floorY);
+    for (const auto& npc : crowd) {
+        drawNPC(npc);
+    }
+}
+
 inline void drawFirstFloorLayout(float floorY, float ceilingY) {
     (void)ceilingY;
 
@@ -1160,6 +1380,8 @@ inline void drawFirstFloorLayout(float floorY, float ceilingY) {
     drawFashionOutlet(glm::vec3(116.0f, floorY, 20.0f), glm::vec2(22.0f, 12.0f),  90.0f);  // right-side store, face -X
     drawFashionOutlet(glm::vec3( 22.0f, floorY, 82.0f), glm::vec2(18.0f, 12.0f), 270.0f);  // left-side store, face +X
     drawFashionOutlet(glm::vec3(116.0f, floorY, 80.0f), glm::vec2(20.0f, 14.0f),  90.0f);  // right-side store, face -X
+
+    drawNPCs(floorY);
 }
 
 } // namespace FirstFloorDesign
