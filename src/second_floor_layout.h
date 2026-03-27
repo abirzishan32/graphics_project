@@ -440,6 +440,65 @@ struct Seat {
 
 static std::vector<Seat> cinemaSeats;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WASHROOM INTERACTIVE STATE
+// ─────────────────────────────────────────────────────────────────────────────
+
+struct BasinState {
+    glm::vec3 pos;
+    glm::vec3 spoutPos;
+    bool isRunning;
+    float particles[6];
+    float flowPhase;
+};
+
+struct StallState {
+    glm::vec3 doorCenter;
+    glm::vec3 hingePos;
+    bool isOpen;
+    float currentAngle;
+};
+
+static std::vector<BasinState> washroomBasins;
+static std::vector<StallState> washroomStalls;
+
+inline void handleWashroomInteraction(glm::vec3 cameraPos) {
+    for (auto& b : washroomBasins) {
+        if (glm::distance(cameraPos, b.pos) < 3.0f) {
+            b.isRunning = !b.isRunning;
+        }
+    }
+    for (auto& s : washroomStalls) {
+        if (glm::distance(cameraPos, s.doorCenter) < 3.0f) {
+            s.isOpen = !s.isOpen;
+        }
+    }
+}
+
+inline void updateWashroom(float deltaTime) {
+    for (auto& b : washroomBasins) {
+        if (b.isRunning) {
+            b.flowPhase += deltaTime * 7.0f;
+            for (int i = 0; i < 6; ++i) {
+                b.particles[i] -= deltaTime * 3.5f; // water fall speed
+                if (b.particles[i] < b.pos.y + 0.15f) { // hit basin
+                    b.particles[i] = b.spoutPos.y - 0.05f; // reset to spout
+                }
+            }
+        }
+    }
+    for (auto& s : washroomStalls) {
+        float target = s.isOpen ? 80.0f : 0.0f;
+        if (s.currentAngle < target) {
+            s.currentAngle += deltaTime * 120.0f;
+            if (s.currentAngle > target) s.currentAngle = target;
+        } else if (s.currentAngle > target) {
+            s.currentAngle -= deltaTime * 120.0f;
+            if (s.currentAngle < target) s.currentAngle = target;
+        }
+    }
+}
+
 struct NPC {
     glm::vec3 position;
     glm::vec3 targetPosition;
@@ -702,6 +761,7 @@ inline void updateNPCs(float deltaTime, float floorY) {
             n.walkCycleTime += deltaTime * 5.0f; 
         }
     }
+    updateWashroom(deltaTime);
 }
 
 inline void drawProceduralNPC(NPC& npc, float walkCycleTime) {
@@ -914,7 +974,6 @@ inline void drawProceduralNPC(NPC& npc, float walkCycleTime) {
         shader.setVec3("pointLights[31].specular", glm::vec3(4.0f));
     }
 }
-
 inline void drawBasin(glm::vec3 position) {
     RenderContext& c = ctx();
     if (!c.shader || c.cylVAO == 0) return;
@@ -924,8 +983,8 @@ inline void drawBasin(glm::vec3 position) {
     glm::vec3 chrome(0.78f, 0.80f, 0.85f);
 
     glm::mat4 bowlM = glm::mat4(1.0f);
-    bowlM = glm::translate(bowlM, position + glm::vec3(0.0f, 0.12f, 0.0f));
-    bowlM = glm::scale(bowlM, glm::vec3(0.34f, 0.10f, 0.30f));
+    bowlM = glm::translate(bowlM, position + glm::vec3(0.0f, 0.09f, 0.0f));
+    bowlM = glm::scale(bowlM, glm::vec3(0.50f, 0.10f, 0.46f));
     if (c.texWashroom != 0) {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, c.texWashroom);
@@ -945,8 +1004,8 @@ inline void drawBasin(glm::vec3 position) {
     glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
 
     glm::mat4 lipM = glm::mat4(1.0f);
-    lipM = glm::translate(lipM, position + glm::vec3(0.0f, 0.17f, 0.0f));
-    lipM = glm::scale(lipM, glm::vec3(0.37f, 0.028f, 0.33f));
+    lipM = glm::translate(lipM, position + glm::vec3(0.0f, 0.13f, 0.0f));
+    lipM = glm::scale(lipM, glm::vec3(0.53f, 0.028f, 0.49f));
     shader.setMat4("model", lipM);
     shader.setVec3("objectColor", porcelain);
     shader.setFloat("ambientStrength", 0.28f);
@@ -958,8 +1017,8 @@ inline void drawBasin(glm::vec3 position) {
     shader.setInt("useTexture", 0);
 
     glm::mat4 faucetStem = glm::mat4(1.0f);
-    faucetStem = glm::translate(faucetStem, position + glm::vec3(-0.26f, 0.26f, -0.02f));
-    faucetStem = glm::scale(faucetStem, glm::vec3(0.028f, 0.20f, 0.028f));
+    faucetStem = glm::translate(faucetStem, position + glm::vec3(-0.30f, 0.24f, -0.02f));
+    faucetStem = glm::scale(faucetStem, glm::vec3(0.060f, 0.28f, 0.060f));
     shader.setMat4("model", faucetStem);
     shader.setVec3("objectColor", chrome);
     shader.setFloat("ambientStrength", 0.15f);
@@ -969,17 +1028,64 @@ inline void drawBasin(glm::vec3 position) {
     glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
 
     glm::mat4 faucetArm = glm::mat4(1.0f);
-    faucetArm = glm::translate(faucetArm, position + glm::vec3(-0.16f, 0.36f, -0.02f));
+    faucetArm = glm::translate(faucetArm, position + glm::vec3(-0.14f, 0.41f, -0.02f));
     faucetArm = glm::rotate(faucetArm, glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    faucetArm = glm::scale(faucetArm, glm::vec3(0.020f, 0.16f, 0.020f));
+    faucetArm = glm::scale(faucetArm, glm::vec3(0.050f, 0.22f, 0.050f));
     shader.setMat4("model", faucetArm);
     glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
 
     glm::mat4 spout = glm::mat4(1.0f);
-    spout = glm::translate(spout, position + glm::vec3(-0.01f, 0.30f, -0.02f));
-    spout = glm::scale(spout, glm::vec3(0.020f, 0.10f, 0.020f));
+    glm::vec3 spoutPos = position + glm::vec3(0.03f, 0.35f, -0.02f);
+    spout = glm::translate(spout, spoutPos);
+    spout = glm::scale(spout, glm::vec3(0.045f, 0.16f, 0.045f));
     shader.setMat4("model", spout);
     glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+    
+    // State integration and Water Particles rendering
+    bool found = false;
+    for (auto& b : washroomBasins) {
+        if (glm::distance(b.pos, position) < 0.1f) {
+            found = true;
+            if (b.isRunning) {
+                shader.setVec3("objectColor", glm::vec3(0.4f, 0.8f, 1.0f)); // Water blue
+                shader.setFloat("objectAlpha", 0.6f);
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+                float basinCatchY = position.y + 0.12f;
+                float streamMidY = (spoutPos.y + basinCatchY) * 0.5f;
+                float streamHalfH = std::max(0.05f, (spoutPos.y - basinCatchY) * 0.5f);
+                float pulse = 0.95f + 0.10f * std::sin(b.flowPhase);
+
+                glm::mat4 streamM = glm::translate(glm::mat4(1.0f), glm::vec3(spoutPos.x, streamMidY, spoutPos.z));
+                streamM = glm::scale(streamM, glm::vec3(0.040f * pulse, streamHalfH, 0.040f * pulse));
+                shader.setMat4("model", streamM);
+                glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+
+                for (int i = 0; i < 6; ++i) {
+                    float side = 0.010f * std::sin(b.flowPhase + i * 0.8f);
+                    glm::mat4 pM = glm::translate(glm::mat4(1.0f), glm::vec3(spoutPos.x + side, b.particles[i], spoutPos.z));
+                    pM = glm::scale(pM, glm::vec3(0.020f, 0.06f, 0.020f));
+                    shader.setMat4("model", pM);
+                    glDrawArrays(GL_TRIANGLES, 0, 16 * 12);
+                }
+                glDisable(GL_BLEND);
+                shader.setFloat("objectAlpha", 1.0f);
+            }
+            break;
+        }
+    }
+    if (!found) {
+        BasinState nb;
+        nb.pos = position;
+        nb.spoutPos = spoutPos;
+        nb.isRunning = false;
+        for (int i = 0; i < 6; ++i) {
+            nb.particles[i] = spoutPos.y - i * 0.06f;
+        }
+        nb.flowPhase = 0.0f;
+        washroomBasins.push_back(nb);
+    }
 }
 
 inline void drawCommode(glm::vec3 position) {
@@ -1065,15 +1171,54 @@ inline void drawStallRow(glm::vec3 startPos, int numStalls) {
                  glm::vec3(stallWidth - partitionThickness, stallHeight, partitionThickness),
                  partitionColor, 0, 0.16f, 0.50f, 0.55f, 80.0f);
 
-        drawCube(shader, c.cubeVAO,
-                 glm::vec3(stallCenterX, startPos.y + doorBottomGap + doorHeight * 0.5f, startPos.z + stallDepth * 0.5f - partitionThickness * 0.5f),
-                 glm::vec3(stallWidth - 0.18f, doorHeight, partitionThickness),
-                 doorColor, 0, 0.18f, 0.45f, 0.45f, 64.0f);
+        // --- Door & Hinge Animation ---
+        float doorCX = stallCenterX;
+        float doorCY = startPos.y + doorBottomGap + doorHeight * 0.5f;
+        float doorCZ = startPos.z + stallDepth * 0.5f - partitionThickness * 0.5f;
+        glm::vec3 cPos(doorCX, doorCY, doorCZ);
+        
+        float currentAngle = 0.0f;
+        bool found = false;
+        for (auto& st : washroomStalls) {
+            if (glm::distance(st.doorCenter, cPos) < 0.1f) {
+                currentAngle = st.currentAngle;
+                found = true; 
+                break;
+            }
+        }
+        float doorW = stallWidth - 0.18f;
+        glm::vec3 hPos = glm::vec3(doorCX - doorW * 0.5f, doorCY, doorCZ); // Left edge hinge
+        if (!found) {
+            StallState ns;
+            ns.doorCenter = cPos;
+            ns.hingePos = hPos;
+            ns.isOpen = false;
+            ns.currentAngle = 0.0f;
+            washroomStalls.push_back(ns);
+        }
+        
+        glm::mat4 doorM = glm::mat4(1.0f);
+        doorM = glm::translate(doorM, hPos);
+        doorM = glm::rotate(doorM, glm::radians(currentAngle), glm::vec3(0.0f, 1.0f, 0.0f));
+        doorM = glm::translate(doorM, -hPos);
+        
+        // Draw Door with hinge matrix
+        glm::mat4 dDraw = glm::translate(doorM, cPos);
+        dDraw = glm::scale(dDraw, glm::vec3(doorW, doorHeight, partitionThickness));
+        shader.setMat4("model", dDraw);
+        shader.setVec3("objectColor", doorColor);
+        shader.setInt("textureType", 0);
+        shader.setFloat("ambientStrength", 0.18f);
+        shader.setFloat("diffuseStrength", 0.45f);
+        shader.setFloat("specularStrength", 0.45f);
+        shader.setFloat("shininess", 64.0f);
+        glBindVertexArray(c.cubeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
 
-        glm::mat4 knobM = glm::mat4(1.0f);
-        knobM = glm::translate(knobM, glm::vec3(stallCenterX + stallWidth * 0.28f,
+        // Draw Knob inheriting hinge matrix
+        glm::mat4 knobM = glm::translate(doorM, glm::vec3(stallCenterX + stallWidth * 0.28f,
                                                 startPos.y + doorBottomGap + doorHeight * 0.5f,
-                                                startPos.z + stallDepth * 0.5f + 0.03f));
+                                                startPos.z + stallDepth * 0.5f + 0.05f));
         knobM = glm::scale(knobM, glm::vec3(0.05f));
         shader.setMat4("model", knobM);
         shader.setVec3("objectColor", knobColor);
@@ -1144,33 +1289,33 @@ inline void drawLuxuryRestroom(float floorY, float ceilingY) {
              glm::vec3(roomW * 0.36f, roomH, 0.18f), glm::vec3(1.0f), 0, 0.22f, 0.55f, 0.35f, 48.0f);
 
     drawCube(shader, c.cubeVAO,
-             glm::vec3(vanityX, floorY + 1.05f, vanityZ),
-             glm::vec3(1.55f, 0.22f, vanityLen), glm::vec3(0.88f, 0.88f, 0.90f), 0,
+             glm::vec3(vanityX, floorY + 0.78f, vanityZ),
+             glm::vec3(1.55f, 0.20f, vanityLen), glm::vec3(0.88f, 0.88f, 0.90f), 0,
              0.18f, 0.55f, 0.95f, 140.0f);
-
-    drawCube(shader, c.cubeVAO,
-             glm::vec3(roomMinX + 0.24f, floorY + 2.15f, vanityZ),
-             glm::vec3(0.06f, 1.9f, vanityLen - 2.0f), glm::vec3(0.76f, 0.80f, 0.86f), 5,
-             0.25f, 0.45f, 0.65f, 100.0f);
 
     for (int i = 0; i < 4; ++i) {
         float z = vanityZ - (vanityLen * 0.34f) + i * (vanityLen * 0.23f);
-        drawBasin(glm::vec3(vanityX, floorY + 1.15f, z));
+        drawBasin(glm::vec3(vanityX, floorY + 0.82f, z));
     }
 
+    // Soap Dispenser (small metallic box near the basins)
     drawCube(shader, c.cubeVAO,
-             glm::vec3(vanityX + 0.52f, floorY + 1.65f, vanityZ - 4.2f),
-             glm::vec3(0.18f, 0.34f, 0.22f), glm::vec3(0.75f, 0.78f, 0.82f), 3,
+             glm::vec3(vanityX + 0.12f, floorY + 1.30f, vanityZ - 2.2f),
+             glm::vec3(0.12f, 0.20f, 0.12f), glm::vec3(0.75f, 0.78f, 0.82f), 3,
              0.20f, 0.52f, 0.9f, 120.0f);
-
-    drawCube(shader, c.cubeVAO,
-             glm::vec3(vanityX + 0.62f, floorY + 1.34f, vanityZ + 4.4f),
-             glm::vec3(0.30f, 0.38f, 0.22f), glm::vec3(0.80f, 0.82f, 0.86f), 3,
-             0.20f, 0.48f, 0.88f, 110.0f);
-    drawCube(shader, c.cubeVAO,
-             glm::vec3(vanityX + 0.72f, floorY + 1.28f, vanityZ + 4.4f),
-             glm::vec3(0.10f, 0.26f, 0.12f), glm::vec3(0.73f, 0.76f, 0.82f), 3,
-             0.20f, 0.40f, 0.85f, 96.0f);
+             
+    // Modern Hand Dryer (sleek curved aerodynamic shell using sphereVAO)
+    glm::mat4 hd = glm::translate(glm::mat4(1.0f), glm::vec3(vanityX + 0.15f, floorY + 1.20f, vanityZ + 5.0f));
+    hd = glm::scale(hd, glm::vec3(0.15f, 0.22f, 0.18f));
+    shader.setMat4("model", hd);
+    shader.setVec3("objectColor", glm::vec3(0.85f, 0.85f, 0.88f)); // Clean metallic white
+    shader.setInt("textureType", 0);
+    shader.setFloat("ambientStrength", 0.3f);
+    shader.setFloat("diffuseStrength", 0.6f);
+    shader.setFloat("specularStrength", 1.0f);
+    shader.setFloat("shininess", 128.0f);
+    glBindVertexArray(c.sphereVAO);
+    glDrawElements(GL_TRIANGLES, c.sphereCount, GL_UNSIGNED_INT, 0);
 
     drawStallRow(glm::vec3(roomMinX + 10.2f, floorY, roomMinZ + 24.0f), 4);
 

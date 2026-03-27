@@ -535,13 +535,16 @@ void processInput(GLFWwindow *window)
         eKeyPressed = false;
     }
 
-    // SPACE key: call elevator to current floor when user is outside near door
-    // and elevator cabin is currently on a different floor.
+    // SPACE key: handle elevator callback and washroom specific interactions
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
-        if (!spaceKeyPressed && outsideElevatorForInput) {
-            int landingFloor = elevator.floorFromY(camera.Position.y);
-            if (landingFloor != elevator.currentFloor || elevator.state == Elevator::State::MOVING) {
-                elevator.requestFromOutside(landingFloor);
+        if (!spaceKeyPressed) {
+            if (outsideElevatorForInput) {
+                int landingFloor = elevator.floorFromY(camera.Position.y);
+                if (landingFloor != elevator.currentFloor || elevator.state == Elevator::State::MOVING) {
+                    elevator.requestFromOutside(landingFloor);
+                }
+            } else {
+                SecondFloorDesign::handleWashroomInteraction(camera.Position);
             }
             spaceKeyPressed = true;
         }
