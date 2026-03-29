@@ -12,6 +12,7 @@
 #include "escalator.h"
 #include "first_floor_layout.h"
 #include "second_floor_layout.h"
+#include "third_floor_layout.h"
 #include "tree.h"
 
 #include <iostream>
@@ -421,6 +422,7 @@ int main()
         // Update second floor NPC animations and AI behaviors
         SecondFloorDesign::updateNPCs(deltaTime, 2.0f * FLOOR_TO_FLOOR_HEIGHT);
         FirstFloorDesign::updateNPCs(deltaTime, 1.0f * FLOOR_TO_FLOOR_HEIGHT);
+        ThirdFloorDesign::updateFoodCourtVendors(deltaTime);
 
         // Get actual framebuffer size for High-DPI displays (Mac)
         int display_w, display_h;
@@ -1533,6 +1535,9 @@ void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int q
             SecondFloorDesign::setRenderContext(shader, cubeVAO, cylVAO, sphereVAO, sphereCount,
                                                texSofa, texClockworkBillboard, texInterstellarBillboard, texWashroom);
             SecondFloorDesign::drawSecondFloorLayout(floorY, ceilingY);
+        } else if (floor == 3) {
+            ThirdFloorDesign::setRenderContext(shader, cubeVAO, cylVAO, sphereVAO, sphereCount, 16);
+            ThirdFloorDesign::drawThirdFloor(floorY, deltaTime, LOT_WIDTH * 0.5f, LOT_DEPTH * 0.5f);
         }
 
         shader.setInt("useTexture", 0);

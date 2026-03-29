@@ -31,18 +31,20 @@ struct Style {
 	float lengthRatio = 0.74f;
 	float radiusRatio = 0.66f;
 	float leafScale = 0.16f;
+	int leafClusterCount = 3;
 };
 
 inline Style makeGroundGateStyle() {
 	Style s;
 	s.trunkColor = glm::vec3(0.23f, 0.13f, 0.08f);
-	s.leafPrimary = glm::vec3(0.22f, 0.60f, 0.20f);
-	s.leafSecondary = glm::vec3(0.34f, 0.72f, 0.26f);
+	s.leafPrimary = glm::vec3(0.18f, 0.66f, 0.18f);
+	s.leafSecondary = glm::vec3(0.28f, 0.78f, 0.24f);
 	s.branchFactor = 3;
 	s.tiltDegrees = 32.0f;
 	s.lengthRatio = 0.75f;
 	s.radiusRatio = 0.68f;
-	s.leafScale = 0.14f;
+	s.leafScale = 0.17f;
+	s.leafClusterCount = 6;
 	return s;
 }
 
@@ -56,6 +58,7 @@ inline Style makeAtriumStyle() {
 	s.lengthRatio = 0.75f;
 	s.radiusRatio = 0.65f;
 	s.leafScale = 0.18f;
+	s.leafClusterCount = 4;
 	return s;
 }
 
@@ -68,11 +71,17 @@ inline void drawLeafCluster(Shader& shader,
 							float seed) {
 	glm::vec3 leafColor = (std::sin(seed) > 0.0f) ? style.leafPrimary : style.leafSecondary;
 
-	const glm::vec3 offsets[3] = {
+	const glm::vec3 offsets[8] = {
 		glm::vec3(0.00f, style.leafScale * 0.65f, 0.00f),
 		glm::vec3(style.leafScale * 0.55f, style.leafScale * 0.18f, style.leafScale * 0.25f),
-		glm::vec3(-style.leafScale * 0.52f, style.leafScale * 0.24f, -style.leafScale * 0.28f)
+		glm::vec3(-style.leafScale * 0.52f, style.leafScale * 0.24f, -style.leafScale * 0.28f),
+		glm::vec3(style.leafScale * 0.22f, style.leafScale * 0.78f, -style.leafScale * 0.16f),
+		glm::vec3(-style.leafScale * 0.26f, style.leafScale * 0.70f, style.leafScale * 0.18f),
+		glm::vec3(style.leafScale * 0.68f, style.leafScale * 0.40f, -style.leafScale * 0.04f),
+		glm::vec3(-style.leafScale * 0.66f, style.leafScale * 0.36f, style.leafScale * 0.02f),
+		glm::vec3(0.00f, style.leafScale * 0.95f, style.leafScale * 0.05f)
 	};
+	int clusterCount = std::max(1, std::min(style.leafClusterCount, 8));
 
 	shader.setVec3("objectColor", leafColor);
 	shader.setInt("textureType", 0);
@@ -84,9 +93,11 @@ inline void drawLeafCluster(Shader& shader,
 
 	if (sphereVAO != 0 && sphereCount > 0) {
 		glBindVertexArray(sphereVAO);
-		for (int i = 0; i < 3; ++i) {
+		for (int i = 0; i < clusterCount; ++i) {
+			glm::vec3 leafColor = ((i + (int)(seed * 10.0f)) % 2 == 0) ? style.leafPrimary : style.leafSecondary;
+			shader.setVec3("objectColor", leafColor);
 			glm::mat4 m = glm::translate(parentMatrix, offsets[i]);
-			m = glm::scale(m, glm::vec3(style.leafScale + 0.02f * (float)i));
+			m = glm::scale(m, glm::vec3(style.leafScale + 0.014f * (float)i));
 			shader.setMat4("model", m);
 			glDrawElements(GL_TRIANGLES, sphereCount, GL_UNSIGNED_INT, 0);
 		}
