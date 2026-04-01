@@ -60,12 +60,12 @@ void drawStopStencil(Shader& shader, unsigned int cubeVAO, glm::vec3 position, f
 void drawDirectionalArrow(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float rotation);
 void drawSpeedBump(Shader& shader, unsigned int cubeVAO, glm::vec3 position, float width);
 void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVAO);
-void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO,
+void drawScene(Shader& shader, Shader& gouraudShader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO,
                unsigned int coneVAO, int coneCount, unsigned int sphereVAO, int sphereCount);
 void setFancyWindowContext(Shader& shader, unsigned int cubeVAO);
 void setFancyWindowYaw(float yawDeg);
 void drawFancyWindow(glm::vec3 position);
-void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int sphereVAO, int sphereCount, unsigned int cylVAO);
+void drawStackedEmptyFloors(Shader& shader, Shader& gouraudShader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int sphereVAO, int sphereCount, unsigned int cylVAO);
 void drawElevatorSystem(Shader& shader, unsigned int cubeVAO);
 unsigned int createCurvedBarrierVAO(int& outVertexCount);
 void drawCurvedBarrier(Shader& shader, unsigned int VAO, int vertexCount);
@@ -379,6 +379,7 @@ int main()
 
     // Build and compile shader program
     Shader shader("pbrVertex.vs", "pbrFragment.fs");
+    Shader gouraudShader("gouraud.vs", "gouraud.fs");
 
     // Create geometry
     unsigned int cubeVAO = createCubeVAO();
@@ -437,6 +438,9 @@ int main()
         shader.use();
         setupLighting(shader);
 
+        gouraudShader.use();
+        setupLighting(gouraudShader);
+
         if (showFourViewports) {
             const int currentFloor = getCurrentCameraFloor(camera.Position.y, FLOOR_TO_FLOOR_HEIGHT);
             const float floorYBase = currentFloor * FLOOR_TO_FLOOR_HEIGHT;
@@ -453,10 +457,18 @@ int main()
             auto renderViewportScene = [&](int vx, int vy, int vw, int vh, const glm::mat4& proj, const glm::mat4& view, const glm::vec3& viewPos) {
                 glViewport(vx, vy, vw, vh);
                 glClear(GL_DEPTH_BUFFER_BIT);
+                
+                gouraudShader.use();
+                gouraudShader.setMat4("projection", proj);
+                gouraudShader.setMat4("view", view);
+                gouraudShader.setVec3("viewPos", viewPos);
+
+                shader.use();
                 shader.setMat4("projection", proj);
                 shader.setMat4("view", view);
                 shader.setVec3("viewPos", viewPos);
-                drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO, coneVAO, coneCount, sphereVAO, sphereCount);
+                
+                drawScene(shader, gouraudShader, cubeVAO, quadVAO, cylVAO, wedgeVAO, coneVAO, coneCount, sphereVAO, sphereCount);
                 drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
                 drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
             };
@@ -490,10 +502,18 @@ int main()
             float aspectRatio = (float)display_w / (float)display_h;
             glm::mat4 projectionFullscreen = glm::perspective(glm::radians(camera.Zoom), aspectRatio, 0.1f, 200.0f);
             glm::mat4 viewFullscreen = camera.GetViewMatrix();
+            
+            gouraudShader.use();
+            gouraudShader.setMat4("projection", projectionFullscreen);
+            gouraudShader.setMat4("view", viewFullscreen);
+            gouraudShader.setVec3("viewPos", camera.Position);
+
+            shader.use();
             shader.setMat4("projection", projectionFullscreen);
             shader.setMat4("view", viewFullscreen);
             shader.setVec3("viewPos", camera.Position);
-            drawScene(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO, coneVAO, coneCount, sphereVAO, sphereCount);
+            
+            drawScene(shader, gouraudShader, cubeVAO, quadVAO, cylVAO, wedgeVAO, coneVAO, coneCount, sphereVAO, sphereCount);
             drawCurvedBarrier(shader, curvedBarrierVAO, curvedBarrierCount);
             drawTexturedObjects(shader, cubeVAO, sphereVAO, sphereCount, coneVAO, coneCount, texBrick, texContainer);
         }
@@ -948,11 +968,40 @@ unsigned int loadTexture(const char* path) {
     glGenTextures(1, &textureID);
     int width, height, nChannels;
     stbi_set_flip_vertically_on_load(true);
-    unsigned char* data = stbi_load(path, &width, &height, &nChannels, 0);
+    unsigned char* data = stbi_load(path, &width, &height, &nChannels, STBI_rgb_alpha);
     if (data) {
-        GLenum format = (nChannels == 4) ? GL_RGBA : GL_RGB;
+        // Decode to RGBA consistently, then optionally downscale overly large images
+        // to reduce upload pressure and avoid driver instability on huge textures.
+        int uploadW = width;
+        int uploadH = height;
+        const int maxDim = 2048;
+        std::vector<unsigned char> resized;
+        const unsigned char* uploadData = data;
+
+        if (uploadW > maxDim || uploadH > maxDim) {
+            float scale = std::min((float)maxDim / (float)uploadW, (float)maxDim / (float)uploadH);
+            uploadW = std::max(1, (int)std::floor(uploadW * scale));
+            uploadH = std::max(1, (int)std::floor(uploadH * scale));
+            resized.resize((size_t)uploadW * (size_t)uploadH * 4);
+
+            for (int y = 0; y < uploadH; ++y) {
+                int srcY = (int)((long long)y * (long long)height / (long long)uploadH);
+                for (int x = 0; x < uploadW; ++x) {
+                    int srcX = (int)((long long)x * (long long)width / (long long)uploadW);
+                    const int srcIdx = (srcY * width + srcX) * 4;
+                    const int dstIdx = (y * uploadW + x) * 4;
+                    resized[(size_t)dstIdx + 0] = data[(size_t)srcIdx + 0];
+                    resized[(size_t)dstIdx + 1] = data[(size_t)srcIdx + 1];
+                    resized[(size_t)dstIdx + 2] = data[(size_t)srcIdx + 2];
+                    resized[(size_t)dstIdx + 3] = data[(size_t)srcIdx + 3];
+                }
+            }
+            uploadData = resized.data();
+        }
+
         glBindTexture(GL_TEXTURE_2D, textureID);
-        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, uploadW, uploadH, 0, GL_RGBA, GL_UNSIGNED_BYTE, uploadData);
         glGenerateMipmap(GL_TEXTURE_2D);
         // GL_REPEAT: texture tiles when UVs exceed [0,1]
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -960,7 +1009,8 @@ unsigned int loadTexture(const char* path) {
         // Trilinear filtering: smooth between mipmap levels and within each level
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        std::cout << "Loaded texture: " << path << " (" << width << "x" << height << ", " << nChannels << " ch)\n";
+        std::cout << "Loaded texture: " << path << " (" << width << "x" << height << ", " << nChannels
+                  << " ch -> RGBA " << uploadW << "x" << uploadH << ")\n";
     } else {
         std::cerr << "Failed to load texture: " << path << "\n";
     }
@@ -1327,7 +1377,7 @@ void drawFancyWindow(glm::vec3 position)
     glDisable(GL_BLEND);
 }
 
-void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int sphereVAO, int sphereCount, unsigned int cylVAO)
+void drawStackedEmptyFloors(Shader& shader, Shader& gouraudShader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int sphereVAO, int sphereCount, unsigned int cylVAO)
 {
     glm::vec3 concreteColor(0.42f, 0.41f, 0.39f);
     glm::vec3 wallColor(0.38f, 0.37f, 0.36f);
@@ -1501,7 +1551,7 @@ void drawStackedEmptyFloors(Shader& shader, unsigned int cubeVAO, unsigned int q
 
         // First-floor interior fixtures (same toggle keys as ground floor)
         if (floor == 1) {
-            FirstFloorDesign::drawFirstFloorLayout(floorY, ceilingY);
+            FirstFloorDesign::drawFirstFloorLayout(floorY, ceilingY, gouraudShader);
 
             // Ceiling lights (key 2)
             for (int i = 0; i < 4; ++i) {
@@ -2731,7 +2781,7 @@ void drawParkingSignage(Shader& shader, unsigned int cubeVAO, unsigned int cylVA
 }
 
 // Helper function to draw the entire scene
-void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO,
+void drawScene(Shader& shader, Shader& gouraudShader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int cylVAO, unsigned int wedgeVAO,
                unsigned int coneVAO, int coneCount, unsigned int sphereVAO, int sphereCount) {
     // Reset texture mode to 0 (default starting state) for scene objects that shouldn't change
     shader.setInt("useTexture", 0);
@@ -2742,7 +2792,7 @@ void drawScene(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsig
     drawOutdoorEnvironment(shader, cubeVAO, quadVAO, cylVAO);
 
     // Draw additional empty floors stacked above ground floor
-    drawStackedEmptyFloors(shader, cubeVAO, quadVAO, sphereVAO, sphereCount, cylVAO);
+    drawStackedEmptyFloors(shader, gouraudShader, cubeVAO, quadVAO, sphereVAO, sphereCount, cylVAO);
 
     // Draw the parking lot
     drawParkingLot(shader, cubeVAO, quadVAO, cylVAO, wedgeVAO);

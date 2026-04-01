@@ -739,10 +739,10 @@ inline void drawThirdFloor(float floorY,
                             float deltaTime,
                             float worldCenterX = 70.0f,
                             float worldCenterZ = 50.0f,
-                            float roomHalfW = 25.0f,
-                            float roomHalfD = 35.0f) {
+                            float roomHalfW = 60.0f,
+                            float roomHalfD = 40.0f) {
     // Keep all generated content safely inside the floor even if caller passes lot half-extents.
-    roomHalfW = std::max(18.0f, std::min(roomHalfW, 30.0f));
+    roomHalfW = std::max(18.0f, std::min(roomHalfW, 60.0f));
     roomHalfD = std::max(22.0f, std::min(roomHalfD, 40.0f));
 
     // Initialise vendors on first call
@@ -750,7 +750,7 @@ inline void drawThirdFloor(float floorY,
         initFoodCourt(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD);
 
     // 1. Fractal potted plants lining Left & Right walls
-    drawPlantWalls(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD, 4.5f);
+    drawPlantWalls(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD, 8.5f);
 
     // 2. Food carts & coffee shop on Front & Back walls
     drawFoodOutlets(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD);
@@ -760,7 +760,7 @@ inline void drawThirdFloor(float floorY,
     drawFoodCourtVendors();
 
     // 4. Fancy circular seating in central area
-    drawSeatingArea(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD, 5, 6, 4.8f, 5.0f);
+    drawSeatingArea(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD, 6, 8, 6.0f, 6.0f);
 }
 
 } // namespace ThirdFloorDesign
