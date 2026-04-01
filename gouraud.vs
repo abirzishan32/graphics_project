@@ -58,17 +58,28 @@ struct SpotLight {
 uniform SpotLight spotLight;
 uniform bool useSpotLight;
 
+struct LineLight {
+    vec3 startPos;
+    vec3 endPos;
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+    float constant;
+    float linear;
+    float quadratic;
+};
+#define MAX_LINE_LIGHTS 4
+uniform LineLight lineLights[MAX_LINE_LIGHTS];
+uniform int numLineLights;
+
 uniform vec3 viewPos;
  
  vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir) {
      vec3 lightDir = normalize(-light.direction);
-     // diffuse
      float diff = max(dot(normal, lightDir), 0.0);
-     // specular
      vec3 reflectDir = reflect(-lightDir, normal);
      float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
      
-     // Soften directional light significantly so it doesn't overpower indoor stalls
      vec3 diffuse = light.diffuse * diff * aColor * (diffuseStrength * 0.35);
      vec3 specular = light.specular * spec * vec3(1.0) * (specularStrength * 0.1); 
      return (diffuse + specular);
@@ -76,12 +87,9 @@ uniform vec3 viewPos;
  
  vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir) {
      vec3 lightDir = normalize(light.position - fragPos);
-     // diffuse 
      float diff = max(dot(normal, lightDir), 0.0);
-     // specular
      vec3 reflectDir = reflect(-lightDir, normal);
      float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
-     // attenuation
      float dist = length(light.position - fragPos);
      float attenuation = 1.0 / (light.constant + light.linear * dist + (light.quadratic * 0.2) * (dist * dist));
      
@@ -89,24 +97,37 @@ uniform vec3 viewPos;
      vec3 specular = light.specular * spec * vec3(1.0) * (specularStrength * 0.2) * attenuation;
      return (diffuse + specular);
  }
+
+ vec3 CalcLineLight(LineLight light, vec3 normal, vec3 fragPos, vec3 viewDir) {
+     vec3 AP = fragPos - light.startPos;
+     vec3 AB = light.endPos - light.startPos;
+     float t = dot(AP, AB) / dot(AB, AB);
+     t = clamp(t, 0.0, 1.0);
+     vec3 closestPoint = light.startPos + t * AB;
+     
+     vec3 lightDir = normalize(closestPoint - fragPos);
+     float diff = max(dot(normal, lightDir), 0.0);
+     
+     float dist = length(closestPoint - fragPos);
+     float attenuation = 1.0 / (light.constant + light.linear * dist + (light.quadratic * 0.1) * (dist * dist));
+     
+     vec3 diffuse = light.diffuse * diff * aColor * diffuseStrength * attenuation;
+     
+     return diffuse; // Disable specular for cleaner matte architectural look from bar lights
+ }
  
  vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir) {
      vec3 lightDir = normalize(light.position - fragPos);
-     // diffuse 
      float diff = max(dot(normal, lightDir), 0.0);
-     // specular
      vec3 reflectDir = reflect(-lightDir, normal);
      float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
-     // attenuation
      float dist = length(light.position - fragPos);
      float attenuation = 1.0 / (light.constant + light.linear * dist + (light.quadratic * 0.2) * (dist * dist));    
-     // spotlight intensity (soft edges)
      float theta = dot(lightDir, normalize(-light.direction)); 
      float epsilon = light.cutOff - light.outerCutOff;
      float intensity = smoothstep(0.0, 1.0, (theta - light.outerCutOff) / epsilon);
      
      vec3 diffuse = light.diffuse * diff * aColor * diffuseStrength * attenuation * intensity;
-     // Disable specular for spotlight to avoid plastic-looking flat walls
      return diffuse;
  }
  
@@ -127,6 +148,10 @@ uniform vec3 viewPos;
     
     for(int i = 0; i < numPointLights; i++) {
         result += CalcPointLight(pointLights[i], Normal, FragPos, viewDir);
+    }
+    
+    for(int i = 0; i < numLineLights; i++) {
+        result += CalcLineLight(lineLights[i], Normal, FragPos, viewDir);
     }
     
     if (useSpotLight) {

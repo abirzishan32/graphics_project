@@ -702,65 +702,124 @@ inline unsigned int createRetailStallVAO(int& outCount) {
         pushQuad({cx-hx, cy-hy, cz-hz}, {cx+hx, cy-hy, cz-hz}, {cx+hx, cy-hy, cz+hz}, {cx-hx, cy-hy, cz+hz}, {0,-1,0}, {uvMin.x, uvMin.y}, {uvMax.x, uvMin.y}, {uvMax.x, uvMax.y}, {uvMin.x, uvMax.y}, col);
     };
 
-    float hw = 8.0f, hd = 6.0f, h = 6.0f, wt = 0.2f;
+    // NEW FOLDED CLOTHES STACK GENERATOR
+    auto addFoldedClothesStack = [&](glm::vec3 center) {
+        int count = 3 + (rand() % 3); // 3 to 5 shirts stacked
+        for(int i = 0; i < count; i++) {
+            float yPos = center.y + i * 0.05f;
+            glm::vec3 c = center; 
+            c.y = yPos;
+            c.x += ((rand() % 100) / 100.0f - 0.5f) * 0.04f; // Slight messy folded offset
+            c.z += ((rand() % 100) / 100.0f - 0.5f) * 0.04f;
+            float rotY = ((rand() % 100) / 100.0f - 0.5f) * 0.2f; 
+            glm::vec3 color = c_clothes[rand() % c_clothes.size()];
+            pushRotatedBox(c, glm::vec3(0.2f, 0.02f, 0.15f), rotY, color);
+        }
+    };
+
+    // LUXURY FLAGSHIP DIMENSIONS (24w x 16d x 8h)
+    float hw = 12.0f, hd = 8.0f, h = 8.0f, wt = 0.2f;
     
     // 1. Exterior & Basic Shell
     pushQuad({-hw, 0, wt}, {hw, 0, wt}, {hw, h, wt}, {-hw, h, wt}, {0,0,1}, {0,0},{1,0},{1,1},{0,1}, c_wall);
     pushQuad({hw, 0, 0}, {-hw, 0, 0}, {-hw, h, 0}, {hw, h, 0}, {0,0,-1}, {0,0},{1,0},{1,1},{0,1}, c_wall);
     pushQuad({-hw+wt, 0, hd*2}, {-hw+wt, 0, wt}, {-hw+wt, h, wt}, {-hw+wt, h, hd*2}, {1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
     pushQuad({-hw, 0, wt}, {-hw, 0, hd*2}, {-hw, h, hd*2}, {-hw, h, wt}, {-1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
-    pushQuad({hw-wt, 0, wt}, {hw-wt, 0, hd*2}, {hw-wt, h, hd*2}, {hw-wt, h, wt}, {-1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
-    pushQuad({hw, 0, hd*2}, {hw, 0, wt}, {hw, h, wt}, {hw, h, hd*2}, {1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
-    pushBox({0, h+wt/2, hd}, {hw, wt/2, hd}, c_wall);
+    pushBox({0, h+wt/2, hd}, {hw, wt/2, hd}, c_wall); // Ceiling
     
-    // Baseboards around interior perimeter
+    // --- THE RECESSED WALL NICHE (Right Wall) ---
+    pushQuad({hw-wt, 0, wt}, {hw-wt, 0, 6.0f}, {hw-wt, h, 6.0f}, {hw-wt, h, wt}, {-1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
+    pushQuad({hw-wt, 0, 12.0f}, {hw-wt, 0, hd*2}, {hw-wt, h, hd*2}, {hw-wt, h, 12.0f}, {-1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
+    // Niche recessed face (x = hw)
+    pushQuad({hw, 0.5f, 6.0f}, {hw, 0.5f, 12.0f}, {hw, h-1.5f, 12.0f}, {hw, h-1.5f, 6.0f}, {-1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
+    // Niche bounds
+    pushQuad({hw-wt, h-1.5f, 6.0f}, {hw-wt, h-1.5f, 12.0f}, {hw, h-1.5f, 12.0f}, {hw, h-1.5f, 6.0f}, {0,-1,0}, {0,0},{1,0},{1,1},{0,1}, c_wall); // Top
+    pushQuad({hw-wt, 0.5f, 12.0f}, {hw-wt, 0.5f, 6.0f}, {hw, 0.5f, 6.0f}, {hw, 0.5f, 12.0f}, {0,1,0}, {0,0},{1,0},{1,1},{0,1}, c_wall); // Bottom
+    pushQuad({hw-wt, 0.5f, 6.0f}, {hw-wt, h-1.5f, 6.0f}, {hw, h-1.5f, 6.0f}, {hw, 0.5f, 6.0f}, {0,0,1}, {0,0},{1,0},{1,1},{0,1}, c_wall);   // Left
+    pushQuad({hw, 0.5f, 12.0f}, {hw, h-1.5f, 12.0f}, {hw-wt, h-1.5f, 12.0f}, {hw-wt, 0.5f, 12.0f}, {0,0,-1}, {0,0},{1,0},{1,1},{0,1}, c_wall); // Right
+    // Wall around niche
+    pushQuad({hw-wt, 0, 6.0f}, {hw-wt, 0, 12.0f}, {hw-wt, 0.5f, 12.0f}, {hw-wt, 0.5f, 6.0f}, {-1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
+    pushQuad({hw-wt, h-1.5f, 6.0f}, {hw-wt, h-1.5f, 12.0f}, {hw-wt, h, 12.0f}, {hw-wt, h, 6.0f}, {-1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
+    // Right exterior (+x) face
+    pushQuad({hw, 0, hd*2}, {hw, 0, wt}, {hw, h, wt}, {hw, h, hd*2}, {1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
+    
+    // Baseboards
     pushBox({0, 0.1f, wt + 0.05f}, {hw-wt, 0.15f, 0.05f}, c_metal);
     pushBox({-hw+wt+0.05f, 0.1f, hd}, {0.05f, 0.15f, hd}, c_metal);
-    pushBox({hw-wt-0.05f, 0.1f, hd}, {0.05f, 0.15f, hd}, c_metal);
+    pushBox({hw-wt-0.05f, 0.1f, 3.0f}, {0.05f, 0.15f, 3.0f}, c_metal);
 
-    // 2. The Architectural Storefront
-    pushBox({-hw + 0.75f, h/2, hd*2}, {0.75f, h/2, 0.4f}, c_wall);
-    pushBox({hw - 0.75f, h/2, hd*2}, {0.75f, h/2, 0.4f}, c_wall);
+    // 2. The Architectural Storefront (Z = 16.0)
+    pushBox({-hw + 1.5f, h/2, hd*2}, {1.5f, h/2, 0.4f}, c_wall); // Left pillar
+    pushBox({hw - 1.5f, h/2, hd*2}, {1.5f, h/2, 0.4f}, c_wall);  // Right pillar
     
-    float winWidth = (hw - 1.5f) - (-1.0f);
-    float winCenter = -1.0f + winWidth/2.0f;
-    pushBox({winCenter, 0.4f, hd*2}, {winWidth/2.0f, 0.4f, 0.2f}, c_wall); 
-    pushBox({-1.0f, h/2, hd*2}, {0.2f, h/2, 0.2f}, c_wall);
+    float winWidth = (hw - 3.0f) - (-2.0f);
+    float winCenter = -2.0f + winWidth/2.0f;
+    pushBox({winCenter, 0.5f, hd*2}, {winWidth/2.0f, 0.5f, 0.2f}, c_wall); // Low display window wall
+    pushBox({-2.0f, h/2, hd*2}, {0.2f, h/2, 0.2f}, c_wall); // Divider Pillar
     
     // 3. The 3D Marquee Signboard
-    float marqueeH = 1.4f, marqueeY = h - marqueeH/2.0f;
+    float marqueeH = 2.0f, marqueeY = h - marqueeH/2.0f;
     pushBox({0, marqueeY, hd*2 + 0.1f}, {hw, marqueeH/2.0f, 0.3f}, c_marquee);
-    
-    float mzf = hd*2 + 0.41f;
+    float mzf = hd*2 + 0.41f; // Marquee z-front canvas
     pushQuad({-hw, marqueeY - marqueeH/2, mzf}, {hw, marqueeY - marqueeH/2, mzf},
              {hw, marqueeY + marqueeH/2, mzf}, {-hw, marqueeY + marqueeH/2, mzf},
-             {0,0,1}, {0,0}, {1,0}, {1,1}, {0,1}, glm::vec3(1.0f)); // White canvas face
+             {0,0,1}, {0,0}, {1,0}, {1,1}, {0,1}, glm::vec3(1.0f)); 
 
     // 4. Interior Architecture & Props
-    pushBox({0, 0.8f, 7.0f}, {1.6f, 0.05f, 1.2f}, c_tableTop); 
-    pushBox({0, 0.4f, 7.0f}, {1.0f, 0.4f, 0.6f}, c_tableBase);  
     
+    // Center Display Table
+    pushBox({0, 0.8f, hd}, {2.0f, 0.05f, 1.4f}, c_tableTop); 
+    pushBox({0, 0.4f, hd}, {1.4f, 0.4f, 0.8f}, c_tableBase);  
+    addFoldedClothesStack(glm::vec3( 0.8f, 0.86f, hd + 0.5f));
+    addFoldedClothesStack(glm::vec3( 0.8f, 0.86f, hd - 0.5f));
+    addFoldedClothesStack(glm::vec3(-0.8f, 0.86f, hd + 0.5f));
+    addFoldedClothesStack(glm::vec3(-0.8f, 0.86f, hd - 0.5f));
+
+    // Sleek Checkout Counter at the rear
+    pushBox({0.0f, 0.6f, wt + 1.2f}, {3.0f, 0.6f, 0.6f}, glm::vec3(0.12f)); // Dark matte body
+    pushBox({0.0f, 1.22f, wt + 1.2f}, {3.1f, 0.03f, 0.7f}, glm::vec3(0.05f)); // Black top
+    addFoldedClothesStack(glm::vec3(1.5f, 1.26f, wt + 1.2f));
+    addFoldedClothesStack(glm::vec3(-1.5f, 1.26f, wt + 1.2f));
+
+    // Four wooden shelves inside the niche
     for (int y = 0; y < 4; y++) {
-        pushBox({hw - wt - 0.5f, 1.5f + y*0.8f, 6.0f}, {0.5f, 0.04f, 3.5f}, c_tableTop);
+        float shY = 2.0f + y*1.2f;
+        pushBox({hw - wt/2.0f - 0.2f, shY, 9.0f}, {0.4f, 0.04f, 2.8f}, c_tableTop);
+        // Props on shelves
+        for(int s=0; s<4; s++) {
+            float shZ = 6.8f + s*1.4f;
+            addFoldedClothesStack(glm::vec3(hw - wt/2.0f - 0.3f, shY + 0.05f, shZ));
+            addFoldedClothesStack(glm::vec3(hw - wt/2.0f - 0.1f, shY + 0.05f, shZ));
+        }
+        // Bar Light Geometric fixture tucked under the shelf!
+        pushBox({hw - wt/2.0f - 0.2f, shY - 0.06f, 9.0f}, {0.1f, 0.02f, 2.5f}, c_lamp);
     }
 
+    // Ceiling Track Lights running front-to-back
+    pushBox({-4.0f, h - 0.05f, hd}, {0.1f, 0.05f, hd - 1.0f}, c_metal);
+    pushBox({ 4.0f, h - 0.05f, hd}, {0.1f, 0.05f, hd - 1.0f}, c_metal);
+    // Fluorescent fixtures attached to tracks
+    pushBox({-4.0f, h - 0.13f, hd}, {0.05f, 0.03f, hd - 1.2f}, c_lamp);
+    pushBox({ 4.0f, h - 0.13f, hd}, {0.05f, 0.03f, hd - 1.2f}, c_lamp);
+
+    // Clothing Racks (left side)
     auto buildRack = [&](glm::vec3 center) {
-        pushCylinder(center + glm::vec3(0, 0, -1.8f), 0.03f, 1.5f, 10, c_metal, false);
-        pushCylinder(center + glm::vec3(0, 0,  1.8f), 0.03f, 1.5f, 10, c_metal, false);
-        pushCylinder(center + glm::vec3(0, 1.45f, -1.9f), 0.025f, 3.8f, 10, c_metal, true);
+        pushCylinder(center + glm::vec3(0, 0, -2.5f), 0.03f, 1.6f, 10, c_metal, false);
+        pushCylinder(center + glm::vec3(0, 0,  2.5f), 0.03f, 1.6f, 10, c_metal, false);
+        pushCylinder(center + glm::vec3(0, 1.55f, -2.6f), 0.025f, 5.2f, 10, c_metal, true);
         
-        for (int i = 0; i < 12; i++) {
-            float zPos = -1.5f + i * 0.28f;
-            glm::vec3 shirtCenter = center + glm::vec3(0.0f, 1.15f, zPos);
-            // Randomly pick color
-            glm::vec3 randCol = c_clothes[i % c_clothes.size()];
-            pushRotatedBox(shirtCenter, glm::vec3(0.25f, 0.35f, 0.02f), 0.3f, randCol);
+        for (int i = 0; i < 16; i++) {
+            float zPos = -2.2f + i * 0.30f;
+            glm::vec3 shirtCenter = center + glm::vec3(0.0f, 1.25f, zPos);
+            glm::vec3 randCol = c_clothes[rand() % c_clothes.size()];
+            pushRotatedBox(shirtCenter, glm::vec3(0.28f, 0.40f, 0.02f), 0.3f, randCol);
         }
     };
-    buildRack(glm::vec3(-hw + 1.8f, 0, 5.0f)); 
-    buildRack(glm::vec3(-hw + 3.4f, 0, 5.0f)); 
+    buildRack(glm::vec3(-hw + 3.0f, 0, hd - 2.0f)); 
+    buildRack(glm::vec3(-hw + 3.0f, 0, hd + 3.0f)); 
     
-    pushBox({-hw/2.0f - 1.0f, 0.02f, hd*2 - wt}, {2.5f, 0.02f, 0.3f}, c_metal); 
+    // Entrance Threshold
+    pushBox({-hw/2.0f - 2.0f, 0.02f, hd*2 - wt}, {3.5f, 0.02f, 0.4f}, c_metal); 
     
     outCount = (int)(v.size() / 11);
     
@@ -786,8 +845,9 @@ inline unsigned int createRetailStallVAO(int& outCount) {
 inline void drawFirstFloorRetailStalls(float floorY, Shader& gouraudShader, unsigned int retailStallVAO, int retailStallCount) {
     gouraudShader.use();
     
-    float w = 16.0f;
-    float depth = 12.0f;
+    // NEW LUXURY DIMENSIONS
+    float w = 24.0f;
+    float depth = 16.0f;
     
     // Lighting strengths
     gouraudShader.setFloat("diffuseStrength", 0.90f);
@@ -795,105 +855,110 @@ inline void drawFirstFloorRetailStalls(float floorY, Shader& gouraudShader, unsi
     gouraudShader.setFloat("shininess", 16.0f);
     gouraudShader.setInt("useTexture", 0);
     
-    // Left Wall Stalls (x=16, varying z, facing +x so rot=90)
-    for (int i = 0; i < 4; i++) {
+    // BIND THE VAO BEFORE DRAWING! The previous commit accidentally dropped this.
+    glBindVertexArray(retailStallVAO);
+    
+    auto applyLineLight = [&](int idx, glm::vec3 start, glm::vec3 end) {
+        std::string base = "lineLights[" + std::to_string(idx) + "].";
+        gouraudShader.setVec3(base + "startPos", start);
+        gouraudShader.setVec3(base + "endPos", end);
+        gouraudShader.setVec3(base + "ambient", glm::vec3(0.0f));
+        gouraudShader.setVec3(base + "diffuse", glm::vec3(1.0f, 0.95f, 0.85f));
+        gouraudShader.setVec3(base + "specular", glm::vec3(0.2f));
+        gouraudShader.setFloat(base + "constant", 1.0f);
+        gouraudShader.setFloat(base + "linear", 0.10f);
+        gouraudShader.setFloat(base + "quadratic", 0.05f);
+    };
+
+    // Left Wall Stalls (x=depth/2, varying z, facing +x so rot=90)
+    // 3 Stalls perfectly fill the lot depth (Lot Depth = 100, 3*26 = 78 footprint)
+    for (int i = 0; i < 3; i++) {
         glm::mat4 m = glm::mat4(1.0f);
-        m = glm::translate(m, glm::vec3(16.0f, floorY, 12.0f + i*(w + 2.0f) + w/2.0f));
+        m = glm::translate(m, glm::vec3(depth, floorY, 12.0f + i*(w + 2.0f) + w/2.0f));
         m = glm::rotate(m, glm::radians(90.0f), glm::vec3(0,1,0));
         gouraudShader.setMat4("model", m);
         
-        // Spotlight Uniforms
+        // Spotlight Entrance
         gouraudShader.setBool("useSpotLight", true);
-        gouraudShader.setVec3("spotLight.position", glm::vec3(16.0f + depth/2.0f, floorY + 5.8f, 12.0f + i*(w + 2.0f) + w/2.0f));
+        gouraudShader.setVec3("spotLight.position", glm::vec3(depth*1.5f, floorY + 7.8f, 12.0f + i*(w + 2.0f) + w/2.0f));
         gouraudShader.setVec3("spotLight.direction", glm::vec3(0, -1, 0));
-        gouraudShader.setFloat("spotLight.cutOff", glm::cos(glm::radians(25.0f)));
-        gouraudShader.setFloat("spotLight.outerCutOff", glm::cos(glm::radians(35.0f)));
+        gouraudShader.setFloat("spotLight.cutOff", glm::cos(glm::radians(30.0f)));
+        gouraudShader.setFloat("spotLight.outerCutOff", glm::cos(glm::radians(45.0f)));
         gouraudShader.setVec3("spotLight.ambient", glm::vec3(0.1f));
-        gouraudShader.setVec3("spotLight.diffuse", glm::vec3(1.2f, 1.1f, 1.0f));
-        gouraudShader.setVec3("spotLight.specular", glm::vec3(1.0f));
+        gouraudShader.setVec3("spotLight.diffuse", glm::vec3(1.0f, 0.95f, 0.9f));
+        gouraudShader.setVec3("spotLight.specular", glm::vec3(0.5f));
         gouraudShader.setFloat("spotLight.constant", 1.0f);
-        gouraudShader.setFloat("spotLight.linear", 0.09f);
-        gouraudShader.setFloat("spotLight.quadratic", 0.032f);
+        gouraudShader.setFloat("spotLight.linear", 0.07f);
+        gouraudShader.setFloat("spotLight.quadratic", 0.017f);
         
-        // Point light (bar light)
-        gouraudShader.setInt("numPointLights", 1);
-        gouraudShader.setVec3("pointLights[0].position", glm::vec3(16.0f + depth - 0.2f, floorY + 0.3f, 12.0f + i*(w + 2.0f) + w/2.0f));
-        gouraudShader.setVec3("pointLights[0].ambient", glm::vec3(0.0f));
-        gouraudShader.setVec3("pointLights[0].diffuse", glm::vec3(0.6f, 0.4f, 0.1f));
-        gouraudShader.setVec3("pointLights[0].specular", glm::vec3(0.3f));
-        gouraudShader.setFloat("pointLights[0].constant", 1.0f);
-        gouraudShader.setFloat("pointLights[0].linear", 0.22f);
-        gouraudShader.setFloat("pointLights[0].quadratic", 0.20f);
+        // Line lights inside
+        gouraudShader.setInt("numPointLights", 0);
+        gouraudShader.setInt("numLineLights", 2);
         
-        glBindVertexArray(retailStallVAO);
+        glm::vec3 trackWorld1A = glm::vec3(m * glm::vec4(-4.0f, 7.8f, 2.0f, 1.0f));
+        glm::vec3 trackWorld1B = glm::vec3(m * glm::vec4(-4.0f, 7.8f, 14.0f, 1.0f));
+        applyLineLight(0, trackWorld1A, trackWorld1B);
+        
+        glm::vec3 nicheWorldA = glm::vec3(m * glm::vec4(11.9f, 6.0f, 6.5f, 1.0f));
+        glm::vec3 nicheWorldB = glm::vec3(m * glm::vec4(11.9f, 6.0f, 11.5f, 1.0f));
+        applyLineLight(1, nicheWorldA, nicheWorldB);
+        
         glDrawArrays(GL_TRIANGLES, 0, retailStallCount);
     }
     
-    // Right Wall Stalls (x=LOT_WIDTH-16, varying z, facing -x so rot=-90)
-    for (int i = 0; i < 4; i++) {
+    // Right Wall Stalls (x=LOT_WIDTH-depth, varying z, facing -x so rot=-90)
+    for (int i = 0; i < 3; i++) {
         glm::mat4 m = glm::mat4(1.0f);
-        m = glm::translate(m, glm::vec3(140.0f - 16.0f, floorY, 12.0f + i*(w + 2.0f) + w/2.0f));
+        m = glm::translate(m, glm::vec3(140.0f - depth, floorY, 12.0f + i*(w + 2.0f) + w/2.0f));
         m = glm::rotate(m, glm::radians(-90.0f), glm::vec3(0,1,0));
         gouraudShader.setMat4("model", m);
         
-        // Spotlight Uniforms
+        // Spotlight 
         gouraudShader.setBool("useSpotLight", true);
-        gouraudShader.setVec3("spotLight.position", glm::vec3(140.0f - 16.0f - depth/2.0f, floorY + 5.8f, 12.0f + i*(w + 2.0f) + w/2.0f));
-        gouraudShader.setVec3("spotLight.direction", glm::vec3(0, -1, 0));
-        gouraudShader.setFloat("spotLight.cutOff", glm::cos(glm::radians(25.0f)));
-        gouraudShader.setFloat("spotLight.outerCutOff", glm::cos(glm::radians(35.0f)));
-        gouraudShader.setVec3("spotLight.ambient", glm::vec3(0.1f));
-        gouraudShader.setVec3("spotLight.diffuse", glm::vec3(1.2f, 1.1f, 1.0f));
-        gouraudShader.setVec3("spotLight.specular", glm::vec3(1.0f));
-        gouraudShader.setFloat("spotLight.constant", 1.0f);
-        gouraudShader.setFloat("spotLight.linear", 0.09f);
-        gouraudShader.setFloat("spotLight.quadratic", 0.032f);
+        float sz = 12.0f + i*(w + 2.0f) + w/2.0f;
+        gouraudShader.setVec3("spotLight.position", glm::vec3(140.0f - depth*1.5f, floorY + 7.8f, sz));
         
-        // Point light
-        gouraudShader.setInt("numPointLights", 1);
-        gouraudShader.setVec3("pointLights[0].position", glm::vec3(140.0f - 16.0f - depth + 0.2f, floorY + 0.3f, 12.0f + i*(w + 2.0f) + w/2.0f));
-        gouraudShader.setVec3("pointLights[0].ambient", glm::vec3(0.0f));
-        gouraudShader.setVec3("pointLights[0].diffuse", glm::vec3(0.6f, 0.4f, 0.1f));
-        gouraudShader.setVec3("pointLights[0].specular", glm::vec3(0.3f));
-        gouraudShader.setFloat("pointLights[0].constant", 1.0f);
-        gouraudShader.setFloat("pointLights[0].linear", 0.22f);
-        gouraudShader.setFloat("pointLights[0].quadratic", 0.20f);
+        gouraudShader.setInt("numPointLights", 0);
+        gouraudShader.setInt("numLineLights", 2);
+        
+        glm::vec3 trackWorld1A = glm::vec3(m * glm::vec4(-4.0f, 7.8f, 2.0f, 1.0f));
+        glm::vec3 trackWorld1B = glm::vec3(m * glm::vec4(-4.0f, 7.8f, 14.0f, 1.0f));
+        applyLineLight(0, trackWorld1A, trackWorld1B);
+        
+        glm::vec3 nicheWorldA = glm::vec3(m * glm::vec4(11.9f, 6.0f, 6.5f, 1.0f));
+        glm::vec3 nicheWorldB = glm::vec3(m * glm::vec4(11.9f, 6.0f, 11.5f, 1.0f));
+        applyLineLight(1, nicheWorldA, nicheWorldB);
         
         glDrawArrays(GL_TRIANGLES, 0, retailStallCount);
     }
     
     // Back Wall Stalls (varying x, z=16, facing +z so rot=0)
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 3; i++) {
         glm::mat4 m = glm::mat4(1.0f);
-        m = glm::translate(m, glm::vec3(140.0f/2.0f - 2.5f*w + i*(w + 2.0f), floorY, 4.0f));
+        m = glm::translate(m, glm::vec3(140.0f/2.0f - 1.5f*w + i*(w + 2.0f), floorY, depth));
         gouraudShader.setMat4("model", m);
         
-        // Spotlight Uniforms
+        // Spotlight 
         gouraudShader.setBool("useSpotLight", true);
-        gouraudShader.setVec3("spotLight.position", glm::vec3(140.0f/2.0f - 2.5f*w + i*(w + 2.0f), floorY + 5.8f, 4.0f + depth/2.0f));
-        gouraudShader.setVec3("spotLight.direction", glm::vec3(0, -1, 0));
-        gouraudShader.setFloat("spotLight.cutOff", glm::cos(glm::radians(25.0f)));
-        gouraudShader.setFloat("spotLight.outerCutOff", glm::cos(glm::radians(35.0f)));
-        gouraudShader.setVec3("spotLight.ambient", glm::vec3(0.1f));
-        gouraudShader.setVec3("spotLight.diffuse", glm::vec3(1.2f, 1.1f, 1.0f));
-        gouraudShader.setVec3("spotLight.specular", glm::vec3(1.0f));
-        gouraudShader.setFloat("spotLight.constant", 1.0f);
-        gouraudShader.setFloat("spotLight.linear", 0.09f);
-        gouraudShader.setFloat("spotLight.quadratic", 0.032f);
+        float sx = 140.0f/2.0f - 1.5f*w + i*(w + 2.0f);
+        gouraudShader.setVec3("spotLight.position", glm::vec3(sx, floorY + 7.8f, depth*1.5f));
         
-        // Point light
-        gouraudShader.setInt("numPointLights", 1);
-        gouraudShader.setVec3("pointLights[0].position", glm::vec3(140.0f/2.0f - 2.5f*w + i*(w + 2.0f), floorY + 0.3f, 4.0f + depth - 0.2f));
-        gouraudShader.setVec3("pointLights[0].ambient", glm::vec3(0.0f));
-        gouraudShader.setVec3("pointLights[0].diffuse", glm::vec3(0.6f, 0.4f, 0.1f));
-        gouraudShader.setVec3("pointLights[0].specular", glm::vec3(0.3f));
-        gouraudShader.setFloat("pointLights[0].constant", 1.0f);
-        gouraudShader.setFloat("pointLights[0].linear", 0.22f);
-        gouraudShader.setFloat("pointLights[0].quadratic", 0.20f);
+        gouraudShader.setInt("numPointLights", 0);
+        gouraudShader.setInt("numLineLights", 2);
+        
+        glm::vec3 trackWorld1A = glm::vec3(m * glm::vec4(-4.0f, 7.8f, 2.0f, 1.0f));
+        glm::vec3 trackWorld1B = glm::vec3(m * glm::vec4(-4.0f, 7.8f, 14.0f, 1.0f));
+        applyLineLight(0, trackWorld1A, trackWorld1B);
+        
+        glm::vec3 nicheWorldA = glm::vec3(m * glm::vec4(11.9f, 6.0f, 6.5f, 1.0f));
+        glm::vec3 nicheWorldB = glm::vec3(m * glm::vec4(11.9f, 6.0f, 11.5f, 1.0f));
+        applyLineLight(1, nicheWorldA, nicheWorldB);
         
         glDrawArrays(GL_TRIANGLES, 0, retailStallCount);
     }
     
+    // Safety disable for next passes
+    gouraudShader.setInt("numLineLights", 0);
     glBindVertexArray(0);
 }
 
