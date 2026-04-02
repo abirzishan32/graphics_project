@@ -939,12 +939,15 @@ inline void drawFirstFloorRetailStalls(float floorY, Shader& gouraudShader, unsi
     // Back Wall Stalls (varying x, z=16, facing +z so rot=0)
     for (int i = 0; i < 3; i++) {
         glm::mat4 m = glm::mat4(1.0f);
-        m = glm::translate(m, glm::vec3(140.0f/2.0f - 1.5f*w + i*(w + 2.0f), floorY, depth));
+        // Correctly spacing out the 3 stalls perfectly in the 74m gap between the left/right walls.
+        // Left wall ends at X=32. Right wall starts at X=108.
+        // Spaces are 33 to 57, 58 to 82, 83 to 107. (Centers at 45, 70, 95).
+        float sx = 70.0f + (i - 1) * (w + 1.0f);
+        m = glm::translate(m, glm::vec3(sx, floorY, depth));
         gouraudShader.setMat4("model", m);
         
         // Spotlight 
         gouraudShader.setBool("useSpotLight", true);
-        float sx = 140.0f/2.0f - 1.5f*w + i*(w + 2.0f);
         gouraudShader.setVec3("spotLight.position", glm::vec3(sx, floorY + 7.8f, depth*1.5f));
         
         gouraudShader.setInt("numPointLights", 0);
