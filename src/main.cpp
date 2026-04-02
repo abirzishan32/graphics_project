@@ -124,7 +124,7 @@ const char* BASE_WINDOW_TITLE = "Shoppning Mall";
 
 unsigned int texElevatorPanelBase = 0;     // wood-like base texture
 unsigned int texSofa = 0;                  // sofa texture for cinema
-unsigned int texRestaurantLogo = 0;         // restaurant logo for 3rd floor
+unsigned int texRestaurantLogos[4] = {0};   // restaurant logos for 3rd floor
 unsigned int texElevatorButtons = 0;       // button overlay texture
 unsigned int texSevenSegment[10] = {0};    // 0..9 LED digit textures
 unsigned int escalatorBillboardVAO = 0;
@@ -411,16 +411,22 @@ int main()
     
     texSofa = loadTexture("src/sofa.jpg");
 
-    // Load and specific wrap params for Restaurant Logo
-    texRestaurantLogo = loadTexture("src/restaurant-name.jpeg");
-    if (texRestaurantLogo != 0) {
-        glBindTexture(GL_TEXTURE_2D, texRestaurantLogo);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        // Also ensure no mipmap bleeding at borders if we want strict clamp
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        // Unbind to prevent accidental modifications
-        glBindTexture(GL_TEXTURE_2D, 0);
+    // Load and specific wrap params for Restaurant Logos
+    const char* restoFiles[4] = {
+        "src/restaurants/1.jpeg",
+        "src/restaurants/2.png",
+        "src/restaurants/3.png",
+        "src/restaurants/4.png"
+    };
+    for (int i=0; i<4; i++) {
+        texRestaurantLogos[i] = loadTexture(restoFiles[i]);
+        if (texRestaurantLogos[i] != 0) {
+            glBindTexture(GL_TEXTURE_2D, texRestaurantLogos[i]);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
     }
 
     // Render loop
@@ -1599,7 +1605,7 @@ void drawStackedEmptyFloors(Shader& shader, Shader& gouraudShader, unsigned int 
                                                texSofa, texClockworkBillboard, texInterstellarBillboard, texWashroom);
             SecondFloorDesign::drawSecondFloorLayout(floorY, ceilingY);
         } else if (floor == 3) {
-            ThirdFloorDesign::setRenderContext(shader, cubeVAO, cylVAO, sphereVAO, sphereCount, 16, 0, 0, 0, texRestaurantLogo);
+            ThirdFloorDesign::setRenderContext(shader, cubeVAO, cylVAO, sphereVAO, sphereCount, 16, 0, 0, 0, texRestaurantLogos);
             ThirdFloorDesign::drawThirdFloor(floorY, deltaTime, gouraudShader, LOT_WIDTH * 0.5f, LOT_DEPTH * 0.5f);
         }
 

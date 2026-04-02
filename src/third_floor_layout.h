@@ -39,7 +39,7 @@ struct RenderContext {
     unsigned int texCartMenu  = 0;   // burger/pizza menu sign
     unsigned int texCoffeeLogo= 0;   // coffee shop logo
     unsigned int texTableTop  = 0;   // marble/wood for tabletop
-    unsigned int texRestaurantLogo = 0; // massive restaurant brand sign
+    unsigned int texRestaurantLogos[4] = {0}; // massive restaurant brand signs
 };
 
 inline RenderContext& ctx() {
@@ -56,7 +56,7 @@ inline void setRenderContext(Shader& shader,
                              unsigned int texCartMenu  = 0,
                              unsigned int texCoffeeLogo= 0,
                              unsigned int texTableTop  = 0,
-                             unsigned int texRestaurantLogo = 0) {
+                             unsigned int* texRestaurantLogos = nullptr) {
     RenderContext& c = ctx();
     c.shader        = &shader;
     c.cubeVAO       = cubeVAO;
@@ -67,7 +67,11 @@ inline void setRenderContext(Shader& shader,
     c.texCartMenu   = texCartMenu;
     c.texCoffeeLogo = texCoffeeLogo;
     c.texTableTop   = texTableTop;
-    c.texRestaurantLogo = texRestaurantLogo;
+    if (texRestaurantLogos) {
+        for (int i=0; i<4; i++) {
+            c.texRestaurantLogos[i] = texRestaurantLogos[i];
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -551,14 +555,21 @@ inline void drawLargeRestaurants(float floorY, Shader& gouraudShader,
     glBindVertexArray(resVAO);
 
     RenderContext& c = ctx();
-    if (c.texRestaurantLogo != 0) {
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, c.texRestaurantLogo);
-        gouraudShader.setInt("texture1", 0);
-        gouraudShader.setInt("useTexture", 1);
-    } else {
-        gouraudShader.setInt("useTexture", 0);
-    }
+    
+    int restoIdx = 0;
+    auto drawStall = [&](glm::mat4 m) {
+        gouraudShader.setMat4("model", m);
+        if (c.texRestaurantLogos[restoIdx % 4] != 0) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, c.texRestaurantLogos[restoIdx % 4]);
+            gouraudShader.setInt("texture1", 0);
+            gouraudShader.setInt("useTexture", 1);
+        } else {
+            gouraudShader.setInt("useTexture", 0);
+        }
+        glDrawArrays(GL_TRIANGLES, 0, resCount);
+        restoIdx++;
+    };
 
     float spacingX = 18.0f; // restaurants are 16m wide, so 18m spacing
     float spacingZ = 20.0f; 
@@ -568,8 +579,7 @@ inline void drawLargeRestaurants(float floorY, Shader& gouraudShader,
     for (float z = worldCenterZ - roomHalfD + 12.0f; z <= worldCenterZ + roomHalfD - 12.0f; z += spacingZ) {
         glm::mat4 m = glm::translate(glm::mat4(1.0f), glm::vec3(wxL, floorY, z));
         m = glm::rotate(m, glm::radians(90.0f), glm::vec3(0,1,0));
-        gouraudShader.setMat4("model", m);
-        glDrawArrays(GL_TRIANGLES, 0, resCount);
+        drawStall(m);
     }
     
     // Right Wall (+X) facing left
@@ -577,16 +587,14 @@ inline void drawLargeRestaurants(float floorY, Shader& gouraudShader,
     for (float z = worldCenterZ - roomHalfD + 12.0f; z <= worldCenterZ + roomHalfD - 12.0f; z += spacingZ) {
         glm::mat4 m = glm::translate(glm::mat4(1.0f), glm::vec3(wxR, floorY, z));
         m = glm::rotate(m, glm::radians(-90.0f), glm::vec3(0,1,0));
-        gouraudShader.setMat4("model", m);
-        glDrawArrays(GL_TRIANGLES, 0, resCount);
+        drawStall(m);
     }
     
     // Back Wall (-Z) facing forward
     float backZ = worldCenterZ - roomHalfD + 1.2f;
     for (float x = worldCenterX - roomHalfW + 24.0f; x <= worldCenterX + roomHalfW - 24.0f; x += spacingX) {
         glm::mat4 m = glm::translate(glm::mat4(1.0f), glm::vec3(x, floorY, backZ));
-        gouraudShader.setMat4("model", m);
-        glDrawArrays(GL_TRIANGLES, 0, resCount);
+        drawStall(m);
     }
     
     // reset texture
