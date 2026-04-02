@@ -766,8 +766,8 @@ inline unsigned int createRetailStallVAO(int& outCount) {
         }
     };
 
-    // LUXURY FLAGSHIP DIMENSIONS (24w x 16d x 8h)
-    float hw = 12.0f, hd = 8.0f, h = 8.0f, wt = 0.2f;
+    // LUXURY FLAGSHIP DIMENSIONS (24w x 16d x 7.6h)
+    float hw = 12.0f, hd = 8.0f, h = 7.6f, wt = 0.2f;
     
     // 1. Exterior & Basic Shell
     pushQuad({-hw, 0, wt}, {hw, 0, wt}, {hw, h, wt}, {-hw, h, wt}, {0,0,1}, {0,0},{1,0},{1,1},{0,1}, c_wall);
@@ -996,7 +996,7 @@ inline void drawFirstFloorRetailStalls(float floorY, Shader& gouraudShader, unsi
         
         // Spotlight Entrance
         gouraudShader.setBool("useSpotLight", true);
-        gouraudShader.setVec3("spotLight.position", glm::vec3(depth*1.5f, floorY + 7.8f, 12.0f + i*(w + 2.0f) + w/2.0f));
+        gouraudShader.setVec3("spotLight.position", glm::vec3(depth*1.5f, floorY + 7.4f, 12.0f + i*(w + 2.0f) + w/2.0f));
         gouraudShader.setVec3("spotLight.direction", glm::vec3(0, -1, 0));
         gouraudShader.setFloat("spotLight.cutOff", glm::cos(glm::radians(30.0f)));
         gouraudShader.setFloat("spotLight.outerCutOff", glm::cos(glm::radians(45.0f)));
@@ -1011,8 +1011,8 @@ inline void drawFirstFloorRetailStalls(float floorY, Shader& gouraudShader, unsi
         gouraudShader.setInt("numPointLights", 0);
         gouraudShader.setInt("numLineLights", 2);
         
-        glm::vec3 trackWorld1A = glm::vec3(m * glm::vec4(-4.0f, 7.8f, 2.0f, 1.0f));
-        glm::vec3 trackWorld1B = glm::vec3(m * glm::vec4(-4.0f, 7.8f, 14.0f, 1.0f));
+        glm::vec3 trackWorld1A = glm::vec3(m * glm::vec4(-4.0f, 7.4f, 2.0f, 1.0f));
+        glm::vec3 trackWorld1B = glm::vec3(m * glm::vec4(-4.0f, 7.4f, 14.0f, 1.0f));
         applyLineLight(0, trackWorld1A, trackWorld1B);
         
         glm::vec3 nicheWorldA = glm::vec3(m * glm::vec4(11.9f, 6.0f, 6.5f, 1.0f));
@@ -1033,13 +1033,13 @@ inline void drawFirstFloorRetailStalls(float floorY, Shader& gouraudShader, unsi
         // Spotlight 
         gouraudShader.setBool("useSpotLight", true);
         float sz = 12.0f + i*(w + 2.0f) + w/2.0f;
-        gouraudShader.setVec3("spotLight.position", glm::vec3(140.0f - depth*1.5f, floorY + 7.8f, sz));
+        gouraudShader.setVec3("spotLight.position", glm::vec3(140.0f - depth*1.5f, floorY + 7.4f, sz));
         
         gouraudShader.setInt("numPointLights", 0);
         gouraudShader.setInt("numLineLights", 2);
         
-        glm::vec3 trackWorld1A = glm::vec3(m * glm::vec4(-4.0f, 7.8f, 2.0f, 1.0f));
-        glm::vec3 trackWorld1B = glm::vec3(m * glm::vec4(-4.0f, 7.8f, 14.0f, 1.0f));
+        glm::vec3 trackWorld1A = glm::vec3(m * glm::vec4(-4.0f, 7.4f, 2.0f, 1.0f));
+        glm::vec3 trackWorld1B = glm::vec3(m * glm::vec4(-4.0f, 7.4f, 14.0f, 1.0f));
         applyLineLight(0, trackWorld1A, trackWorld1B);
         
         glm::vec3 nicheWorldA = glm::vec3(m * glm::vec4(11.9f, 6.0f, 6.5f, 1.0f));
@@ -1059,13 +1059,13 @@ inline void drawFirstFloorRetailStalls(float floorY, Shader& gouraudShader, unsi
         
         // Spotlight 
         gouraudShader.setBool("useSpotLight", true);
-        gouraudShader.setVec3("spotLight.position", glm::vec3(sx, floorY + 7.8f, depth*1.5f));
+        gouraudShader.setVec3("spotLight.position", glm::vec3(sx, floorY + 7.4f, depth*1.5f));
         
         gouraudShader.setInt("numPointLights", 0);
         gouraudShader.setInt("numLineLights", 2);
         
-        glm::vec3 trackWorld1A = glm::vec3(m * glm::vec4(-4.0f, 7.8f, 2.0f, 1.0f));
-        glm::vec3 trackWorld1B = glm::vec3(m * glm::vec4(-4.0f, 7.8f, 14.0f, 1.0f));
+        glm::vec3 trackWorld1A = glm::vec3(m * glm::vec4(-4.0f, 7.4f, 2.0f, 1.0f));
+        glm::vec3 trackWorld1B = glm::vec3(m * glm::vec4(-4.0f, 7.4f, 14.0f, 1.0f));
         applyLineLight(0, trackWorld1A, trackWorld1B);
         
         glm::vec3 nicheWorldA = glm::vec3(m * glm::vec4(11.9f, 6.0f, 6.5f, 1.0f));

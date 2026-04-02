@@ -1054,15 +1054,19 @@ inline void drawLuxuryRestroom(float floorY, float ceilingY) {
         shader.setInt("useTexture", 0);
     }
 
-    drawCube(shader, c.cubeVAO,
-             glm::vec3((roomMinX + roomMaxX) * 0.5f, floorY + 0.02f, (roomMinZ + roomMaxZ) * 0.5f),
-             glm::vec3(roomW, 0.04f, roomD), glm::vec3(1.0f), 0, 0.28f, 0.52f, 0.25f, 30.0f);
+    // Keep washroom tile almost flush with the main slab to avoid visible "sheet" edges.
+    // REMOVED at user request: caused sheet-like artifacts/Z-fighting on the floor.
+    // drawCube(shader, c.cubeVAO,
+    //          glm::vec3((roomMinX + roomMaxX) * 0.5f, floorY + 0.001f, (roomMinZ + roomMaxZ) * 0.5f),
+    //          glm::vec3(roomW, 0.002f, roomD), glm::vec3(1.0f), 0, 0.28f, 0.52f, 0.25f, 30.0f);
 
     drawCube(shader, c.cubeVAO,
              glm::vec3(roomMinX + 0.24f, floorY + 1.35f, vanityZ),
              glm::vec3(0.06f, 0.7f, vanityLen - 0.8f), glm::vec3(1.0f), 0, 0.24f, 0.50f, 0.35f, 40.0f);
 
     shader.setInt("useTexture", 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     drawCube(shader, c.cubeVAO,
              glm::vec3(roomMinX, floorY + roomH * 0.5f, (roomMinZ + roomMaxZ) * 0.5f),
@@ -1137,6 +1141,17 @@ inline void drawSecondFloorLayout(float floorY, float ceilingY) {
     RenderContext& c = ctx();
     if (!c.shader || c.cubeVAO == 0) return;
     Shader& shader = *c.shader;
+
+    // Guard against texture-state leakage from other floors/passes.
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
+    shader.setInt("texture1", 0);
+    shader.setInt("texture2", 1);
+    shader.setInt("useTexture", 0);
+    shader.setInt("textureType", 0);
     
     const float roomWidth = 140.0f;
     const float roomDepth = 100.0f;
@@ -1367,6 +1382,14 @@ inline void drawSecondFloorLayout(float floorY, float ceilingY) {
 
     // --- 8. SIDE RESTROOM ---
     drawLuxuryRestroom(floorY, ceilingY);
+
+    // Restore default mode for any subsequent draws using this shader.
+    shader.setInt("useTexture", 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
 }
 
 } 

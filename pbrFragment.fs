@@ -64,10 +64,11 @@ uniform sampler2D texture2;    // container
 //   3 = fragment-blended (mix image texture with object color, factor computed per-fragment)
 //   4 = panel blend (texture1 base + texture2 overlay alpha)
 //   5 = direct digit display (texture1)
+//   6 = world-space tiled texture1 (repeat, no stretch)
 uniform int useTexture;
 
 // Procedural texture type (used when useTexture == 0)
-// 0=concrete, 1=painted line, 2=car paint, 3=metal, 5=mirror, 6=elevator cable, 7=ribbed step
+// 0=concrete, 1=painted line, 2=car paint, 3=metal, 5=mirror, 6=elevator cable, 7=ribbed step, 8=floor tile helper
 uniform int textureType;
 
 
@@ -253,7 +254,11 @@ void main()
     vec3 baseColor;
 
     if (useTexture == 1) {
-        // State 1: brick-wall
+        // State 1: direct texture sample.
+        // For first-floor slab (textureType 8), use world-space UVs to force repetition without stretching.
+        if (textureType == 8) {
+            sampleUV = FragPos.xz * 0.20;
+        }
         vec3 imgColor = texture(texture1, sampleUV).rgb;
         if (textureType == 4) baseColor = mix(objectColor, imgColor, 0.5);
         else baseColor = imgColor;

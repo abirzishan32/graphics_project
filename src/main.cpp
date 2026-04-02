@@ -135,6 +135,7 @@ unsigned int texClockworkBillboard = 0;    // clockwork cinema
 unsigned int texInterstellarBillboard = 0; // interstellar movie
 unsigned int texWashroom = 0;              // washroom icon
 unsigned int texWooden = 0;                // wooden texture for chairs and tables
+unsigned int texFirstFloor = 0;            // dedicated texture for first-floor surrounding slab
 
 Shader* gFancyWindowShader = nullptr;
 unsigned int gFancyWindowCubeVAO = 0;
@@ -414,6 +415,7 @@ int main()
     
     texSofa = loadTexture("src/sofa.jpg");
     texWooden = loadTexture("src/wooden.jpeg");
+    texFirstFloor = loadTexture("src/1st-floor.jpg");
 
     // Load and specific wrap params for Restaurant Logos
     const char* restoFiles[4] = {
@@ -1529,10 +1531,34 @@ void drawStackedEmptyFloors(Shader& shader, Shader& gouraudShader, unsigned int 
 
         float shaftOpeningW = elevator.shaftWidth + 0.35f;
         float shaftOpeningD = elevator.shaftDepth + 0.35f;
-        drawSlabWithOpening(shader, quadVAO, floorY,
-                            concreteColor, 0, 0.12f, 0.65f, 0.2f, 20.0f,
-                            elevator.shaftCenter.x, elevator.shaftCenter.z,
-                            shaftOpeningW, shaftOpeningD, false);
+        if (floor == 1 && texFirstFloor != 0) {
+            // Use dedicated first-floor image texture only on this floor slab.
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, texFirstFloor);
+            shader.setInt("texture1", 0);
+            shader.setInt("useTexture", 1);
+            drawSlabWithOpening(shader, quadVAO, floorY,
+                                concreteColor, 8, 0.12f, 0.65f, 0.2f, 20.0f,
+                                elevator.shaftCenter.x, elevator.shaftCenter.z,
+                                shaftOpeningW, shaftOpeningD, false);
+
+            // Reset texture binding/state so it cannot affect upper-floor rendering.
+            glBindTexture(GL_TEXTURE_2D, 0);
+
+            // Keep the central atrium floor non-textured.
+            shader.setInt("useTexture", 0);
+            shader.setInt("textureType", 0);
+            glm::mat4 atriumMaskModel = glm::mat4(1.0f);
+            atriumMaskModel = glm::translate(atriumMaskModel, glm::vec3(70.0f, floorY + 0.002f, 50.0f));
+            atriumMaskModel = glm::scale(atriumMaskModel, glm::vec3(24.0f, 1.0f, 24.0f));
+            drawQuad(shader, quadVAO, atriumMaskModel,
+                     concreteColor, 0, 0.12f, 0.65f, 0.2f, 20.0f);
+        } else {
+            drawSlabWithOpening(shader, quadVAO, floorY,
+                                concreteColor, 0, 0.12f, 0.65f, 0.2f, 20.0f,
+                                elevator.shaftCenter.x, elevator.shaftCenter.z,
+                                shaftOpeningW, shaftOpeningD, false);
+        }
 
         float windowY = floorY + wallHeight * 0.58f;
         drawBackWallWithOpenings(floorY, ceilingY, windowY);
