@@ -129,9 +129,10 @@ unsigned int texElevatorButtons = 0;       // button overlay texture
 unsigned int texSevenSegment[10] = {0};    // 0..9 LED digit textures
 unsigned int escalatorBillboardVAO = 0;
 unsigned int texAarongBillboard = 0;
-unsigned int texClockworkBillboard = 0;
-unsigned int texInterstellarBillboard = 0;
-unsigned int texWashroom = 0;
+unsigned int texClockworkBillboard = 0;    // clockwork cinema
+unsigned int texInterstellarBillboard = 0; // interstellar movie
+unsigned int texWashroom = 0;              // washroom icon
+unsigned int texWooden = 0;                // wooden texture for chairs and tables
 
 Shader* gFancyWindowShader = nullptr;
 unsigned int gFancyWindowCubeVAO = 0;
@@ -410,6 +411,7 @@ int main()
     }
     
     texSofa = loadTexture("src/sofa.jpg");
+    texWooden = loadTexture("src/wooden.jpeg");
 
     // Load and specific wrap params for Restaurant Logos
     const char* restoFiles[4] = {
@@ -1605,7 +1607,7 @@ void drawStackedEmptyFloors(Shader& shader, Shader& gouraudShader, unsigned int 
                                                texSofa, texClockworkBillboard, texInterstellarBillboard, texWashroom);
             SecondFloorDesign::drawSecondFloorLayout(floorY, ceilingY);
         } else if (floor == 3) {
-            ThirdFloorDesign::setRenderContext(shader, cubeVAO, cylVAO, sphereVAO, sphereCount, 16, 0, 0, 0, texRestaurantLogos);
+            ThirdFloorDesign::setRenderContext(shader, cubeVAO, cylVAO, sphereVAO, sphereCount, 16, 0, 0, texWooden, texRestaurantLogos);
             ThirdFloorDesign::drawThirdFloor(floorY, deltaTime, gouraudShader, LOT_WIDTH * 0.5f, LOT_DEPTH * 0.5f);
         }
 

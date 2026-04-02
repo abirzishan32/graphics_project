@@ -654,6 +654,9 @@ inline void drawSeatingArea(float floorY,
             glm::mat4 groupM = glm::mat4(1.0f);
             groupM = glm::translate(groupM, glm::vec3(worldCenterX + bx, floorY, worldCenterZ + bz));
             groupM = glm::rotate(groupM, glm::radians(randRot), glm::vec3(0,1,0));
+            
+            // Enlarge the table and chairs!
+            groupM = glm::scale(groupM, glm::vec3(1.6f));
 
             // Table top color (with texture if bound)
             setMat(s, groupM);
