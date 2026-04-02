@@ -71,6 +71,8 @@ unsigned int createCurvedBarrierVAO(int& outVertexCount);
 void drawCurvedBarrier(Shader& shader, unsigned int VAO, int vertexCount);
 unsigned int createSphereVAO(int& outVertexCount);
 unsigned int createConeVAO(int& outVertexCount);
+unsigned int loadTexture(const char* path, bool clampToEdge, float* outAspectRatio);
+unsigned int loadTexture(const char* path, bool clampToEdge);
 unsigned int loadTexture(const char* path);
 void drawTexturedObjects(Shader& shader, unsigned int cubeVAO,
     unsigned int sphereVAO, int sphereCount,
@@ -985,12 +987,23 @@ void drawCurvedBarrier(Shader& shader, unsigned int VAO, int vertexCount) {
 // Applies GL_REPEAT wrapping and GL_LINEAR_MIPMAP_LINEAR filtering.
 // ============================================================
 unsigned int loadTexture(const char* path) {
+    return loadTexture(path, false, nullptr);
+}
+
+unsigned int loadTexture(const char* path, bool clampToEdge) {
+    return loadTexture(path, clampToEdge, nullptr);
+}
+
+unsigned int loadTexture(const char* path, bool clampToEdge, float* outAspectRatio) {
     unsigned int textureID;
     glGenTextures(1, &textureID);
     int width, height, nChannels;
     stbi_set_flip_vertically_on_load(true);
     unsigned char* data = stbi_load(path, &width, &height, &nChannels, STBI_rgb_alpha);
     if (data) {
+        if (outAspectRatio) {
+            *outAspectRatio = (height > 0) ? ((float)width / (float)height) : 1.0f;
+        }
         // Decode to RGBA consistently, then optionally downscale overly large images
         // to reduce upload pressure and avoid driver instability on huge textures.
         int uploadW = width;
@@ -1024,15 +1037,18 @@ unsigned int loadTexture(const char* path) {
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, uploadW, uploadH, 0, GL_RGBA, GL_UNSIGNED_BYTE, uploadData);
         glGenerateMipmap(GL_TEXTURE_2D);
-        // GL_REPEAT: texture tiles when UVs exceed [0,1]
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        // GL_CLAMP_TO_EDGE for logos avoids edge bleeding; GL_REPEAT keeps regular tiling behavior.
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, clampToEdge ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, clampToEdge ? GL_CLAMP_TO_EDGE : GL_REPEAT);
         // Trilinear filtering: smooth between mipmap levels and within each level
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         std::cout << "Loaded texture: " << path << " (" << width << "x" << height << ", " << nChannels
                   << " ch -> RGBA " << uploadW << "x" << uploadH << ")\n";
     } else {
+        if (outAspectRatio) {
+            *outAspectRatio = 1.0f;
+        }
         std::cerr << "Failed to load texture: " << path << "\n";
     }
     stbi_image_free(data);

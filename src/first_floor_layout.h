@@ -21,6 +21,7 @@ void drawCubeAlpha(Shader& shader, unsigned int VAO, glm::vec3 position, glm::ve
                    glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess, float alpha);
 void drawCubeRotated(Shader& shader, unsigned int VAO, glm::vec3 position, glm::vec3 scale, glm::vec3 rotation,
                      glm::vec3 color, int texType, float ambient, float diffuse, float specular, float shininess);
+unsigned int loadTexture(const char* path, bool clampToEdge, float* outAspectRatio);
 
 namespace FirstFloorDesign {
 
@@ -51,6 +52,54 @@ inline RenderContext& ctx() {
 inline AtriumMesh& atriumMesh() {
     static AtriumMesh mesh;
     return mesh;
+}
+
+struct RetailLogoTexture {
+    unsigned int id = 0;
+    float aspectRatio = 1.0f;
+};
+
+inline std::vector<RetailLogoTexture>& retailLogoTextures() {
+    static std::vector<RetailLogoTexture> logos;
+    return logos;
+}
+
+inline int& retailMarqueeCenterFirst() {
+    static int first = 0;
+    return first;
+}
+
+inline int& retailMarqueeCenterCount() {
+    static int count = 0;
+    return count;
+}
+
+inline float& retailMarqueePanelAspect() {
+    static float aspect = 1.0f;
+    return aspect;
+}
+
+inline void ensureRetailLogoTexturesLoaded() {
+    std::vector<RetailLogoTexture>& logos = retailLogoTextures();
+    if (!logos.empty()) return;
+
+    const char* logoFiles[] = {
+        "src/shopping-outlets/1.png",
+        "src/shopping-outlets/2.png",
+        "src/shopping-outlets/3.png",
+        "src/shopping-outlets/4.png"
+    };
+
+    for (const char* path : logoFiles) {
+        float aspect = 1.0f;
+        unsigned int tex = loadTexture(path, true, &aspect);
+        if (tex != 0) {
+            RetailLogoTexture logo;
+            logo.id = tex;
+            logo.aspectRatio = std::max(0.05f, aspect);
+            logos.push_back(logo);
+        }
+    }
 }
 
 inline glm::vec3 rotateY(const glm::vec3& local, float yawDeg) {
@@ -762,9 +811,30 @@ inline unsigned int createRetailStallVAO(int& outCount) {
     float marqueeH = 2.0f, marqueeY = h - marqueeH/2.0f;
     pushBox({0, marqueeY, hd*2 + 0.1f}, {hw - 0.01f, marqueeH/2.0f, 0.3f}, c_marquee);
     float mzf = hd*2 + 0.41f; // Marquee z-front canvas
-    pushQuad({-hw, marqueeY - marqueeH/2, mzf}, {hw, marqueeY - marqueeH/2, mzf},
-             {hw, marqueeY + marqueeH/2, mzf}, {-hw, marqueeY + marqueeH/2, mzf},
-             {0,0,1}, {0,0}, {1,0}, {1,1}, {0,1}, glm::vec3(1.0f)); 
+    const float targetLogoAspect = 16.0f / 9.0f;
+    const float fullMarqueeW = 2.0f * hw;
+    const float centerPanelW = std::min(fullMarqueeW * 0.60f, marqueeH * targetLogoAspect);
+    const float halfCenterW = centerPanelW * 0.5f;
+    const glm::vec3 framePanelColor(0.06f, 0.06f, 0.06f);
+
+    retailMarqueePanelAspect() = centerPanelW / marqueeH;
+
+    // Left framing panel: degenerate UVs, neutral color.
+    pushQuad({-hw, marqueeY - marqueeH/2, mzf}, {-halfCenterW, marqueeY - marqueeH/2, mzf},
+             {-halfCenterW, marqueeY + marqueeH/2, mzf}, {-hw, marqueeY + marqueeH/2, mzf},
+             {0,0,1}, {0,0}, {0,0}, {0,0}, {0,0}, framePanelColor);
+
+    // Center logo panel: UV = [0,1] exactly once.
+    retailMarqueeCenterFirst() = (int)(v.size() / 11);
+    pushQuad({-halfCenterW, marqueeY - marqueeH/2, mzf}, {halfCenterW, marqueeY - marqueeH/2, mzf},
+             {halfCenterW, marqueeY + marqueeH/2, mzf}, {-halfCenterW, marqueeY + marqueeH/2, mzf},
+             {0,0,1}, {0,0}, {1,0}, {1,1}, {0,1}, glm::vec3(1.0f));
+    retailMarqueeCenterCount() = (int)(v.size() / 11) - retailMarqueeCenterFirst();
+
+    // Right framing panel: degenerate UVs, neutral color.
+    pushQuad({halfCenterW, marqueeY - marqueeH/2, mzf}, {hw, marqueeY - marqueeH/2, mzf},
+             {hw, marqueeY + marqueeH/2, mzf}, {halfCenterW, marqueeY + marqueeH/2, mzf},
+             {0,0,1}, {0,0}, {0,0}, {0,0}, {0,0}, framePanelColor);
 
     // 4. Interior Architecture & Props
     
@@ -858,6 +928,14 @@ inline void drawFirstFloorRetailStalls(float floorY, Shader& gouraudShader, unsi
     gouraudShader.setFloat("specularStrength", 0.20f);
     gouraudShader.setFloat("shininess", 16.0f);
     gouraudShader.setInt("useTexture", 0);
+    gouraudShader.setBool("preserveLogoAspect", false);
+    gouraudShader.setFloat("logoAspect", 1.0f);
+    gouraudShader.setFloat("panelAspect", retailMarqueePanelAspect());
+    gouraudShader.setVec3("logoFrameColor", glm::vec3(0.06f, 0.06f, 0.06f));
+    gouraudShader.setInt("texture1", 0);
+
+    ensureRetailLogoTexturesLoaded();
+    std::vector<RetailLogoTexture>& logos = retailLogoTextures();
     
     // BIND THE VAO BEFORE DRAWING! The previous commit accidentally dropped this.
     glBindVertexArray(retailStallVAO);
@@ -873,6 +951,39 @@ inline void drawFirstFloorRetailStalls(float floorY, Shader& gouraudShader, unsi
         gouraudShader.setFloat(base + "linear", 0.10f);
         gouraudShader.setFloat(base + "quadratic", 0.05f);
     };
+
+    auto drawRetailStallInstance = [&](int stallIndex) {
+        const int centerFirst = retailMarqueeCenterFirst();
+        const int centerCount = retailMarqueeCenterCount();
+        const int tailFirst = centerFirst + centerCount;
+        const int tailCount = std::max(0, retailStallCount - tailFirst);
+
+        gouraudShader.setInt("useTexture", 0);
+        gouraudShader.setBool("preserveLogoAspect", false);
+        if (centerFirst > 0) {
+            glDrawArrays(GL_TRIANGLES, 0, centerFirst);
+        }
+        if (tailCount > 0) {
+            glDrawArrays(GL_TRIANGLES, tailFirst, tailCount);
+        }
+
+        if (centerCount > 0) {
+            if (!logos.empty()) {
+                const RetailLogoTexture& logo = logos[(size_t)(stallIndex % (int)logos.size())];
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, logo.id);
+                gouraudShader.setInt("useTexture", 1);
+                gouraudShader.setBool("preserveLogoAspect", true);
+                gouraudShader.setFloat("logoAspect", logo.aspectRatio);
+                gouraudShader.setFloat("panelAspect", retailMarqueePanelAspect());
+            }
+            glDrawArrays(GL_TRIANGLES, centerFirst, centerCount);
+            gouraudShader.setInt("useTexture", 0);
+            gouraudShader.setBool("preserveLogoAspect", false);
+        }
+    };
+
+    int stallDrawIndex = 0;
 
     // Left Wall Stalls (x=depth/2, varying z, facing +x so rot=90)
     // 3 Stalls perfectly fill the lot depth (Lot Depth = 100, 3*26 = 78 footprint)
@@ -908,7 +1019,8 @@ inline void drawFirstFloorRetailStalls(float floorY, Shader& gouraudShader, unsi
         glm::vec3 nicheWorldB = glm::vec3(m * glm::vec4(11.9f, 6.0f, 11.5f, 1.0f));
         applyLineLight(1, nicheWorldA, nicheWorldB);
         
-        glDrawArrays(GL_TRIANGLES, 0, retailStallCount);
+        drawRetailStallInstance(stallDrawIndex);
+        stallDrawIndex++;
     }
     
     // Right Wall Stalls (x=LOT_WIDTH-depth, varying z, facing -x so rot=-90)
@@ -934,7 +1046,8 @@ inline void drawFirstFloorRetailStalls(float floorY, Shader& gouraudShader, unsi
         glm::vec3 nicheWorldB = glm::vec3(m * glm::vec4(11.9f, 6.0f, 11.5f, 1.0f));
         applyLineLight(1, nicheWorldA, nicheWorldB);
         
-        glDrawArrays(GL_TRIANGLES, 0, retailStallCount);
+        drawRetailStallInstance(stallDrawIndex);
+        stallDrawIndex++;
     }
     
     // Back Wall Stalls (varying x, z=16, facing +z so rot=0)
@@ -959,7 +1072,8 @@ inline void drawFirstFloorRetailStalls(float floorY, Shader& gouraudShader, unsi
         glm::vec3 nicheWorldB = glm::vec3(m * glm::vec4(11.9f, 6.0f, 11.5f, 1.0f));
         applyLineLight(1, nicheWorldA, nicheWorldB);
         
-        glDrawArrays(GL_TRIANGLES, 0, retailStallCount);
+        drawRetailStallInstance(stallDrawIndex);
+        stallDrawIndex++;
     }
     
     // Safety disable for next passes
