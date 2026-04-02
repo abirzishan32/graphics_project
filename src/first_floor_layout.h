@@ -706,7 +706,7 @@ inline unsigned int createRetailStallVAO(int& outCount) {
     auto addFoldedClothesStack = [&](glm::vec3 center) {
         int count = 3 + (rand() % 3); // 3 to 5 shirts stacked
         for(int i = 0; i < count; i++) {
-            float yPos = center.y + i * 0.05f;
+            float yPos = center.y + i * 0.041f; // Slight mathematical offset to prevent Z-fighting between shirts in stack
             glm::vec3 c = center; 
             c.y = yPos;
             c.x += ((rand() % 100) / 100.0f - 0.5f) * 0.04f; // Slight messy folded offset
@@ -730,13 +730,14 @@ inline unsigned int createRetailStallVAO(int& outCount) {
     // --- THE RECESSED WALL NICHE (Right Wall) ---
     pushQuad({hw-wt, 0, wt}, {hw-wt, 0, 6.0f}, {hw-wt, h, 6.0f}, {hw-wt, h, wt}, {-1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
     pushQuad({hw-wt, 0, 12.0f}, {hw-wt, 0, hd*2}, {hw-wt, h, hd*2}, {hw-wt, h, 12.0f}, {-1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
-    // Niche recessed face (x = hw)
-    pushQuad({hw, 0.5f, 6.0f}, {hw, 0.5f, 12.0f}, {hw, h-1.5f, 12.0f}, {hw, h-1.5f, 6.0f}, {-1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
+    float nx = hw - 0.05f; // Recess target to prevent Z-fighting with exterior right wall (x=hw)
+    // Niche recessed face (x = nx instead of hw)
+    pushQuad({nx, 0.5f, 6.0f}, {nx, 0.5f, 12.0f}, {nx, h-1.5f, 12.0f}, {nx, h-1.5f, 6.0f}, {-1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
     // Niche bounds
-    pushQuad({hw-wt, h-1.5f, 6.0f}, {hw-wt, h-1.5f, 12.0f}, {hw, h-1.5f, 12.0f}, {hw, h-1.5f, 6.0f}, {0,-1,0}, {0,0},{1,0},{1,1},{0,1}, c_wall); // Top
-    pushQuad({hw-wt, 0.5f, 12.0f}, {hw-wt, 0.5f, 6.0f}, {hw, 0.5f, 6.0f}, {hw, 0.5f, 12.0f}, {0,1,0}, {0,0},{1,0},{1,1},{0,1}, c_wall); // Bottom
-    pushQuad({hw-wt, 0.5f, 6.0f}, {hw-wt, h-1.5f, 6.0f}, {hw, h-1.5f, 6.0f}, {hw, 0.5f, 6.0f}, {0,0,1}, {0,0},{1,0},{1,1},{0,1}, c_wall);   // Left
-    pushQuad({hw, 0.5f, 12.0f}, {hw, h-1.5f, 12.0f}, {hw-wt, h-1.5f, 12.0f}, {hw-wt, 0.5f, 12.0f}, {0,0,-1}, {0,0},{1,0},{1,1},{0,1}, c_wall); // Right
+    pushQuad({hw-wt, h-1.5f, 6.0f}, {hw-wt, h-1.5f, 12.0f}, {nx, h-1.5f, 12.0f}, {nx, h-1.5f, 6.0f}, {0,-1,0}, {0,0},{1,0},{1,1},{0,1}, c_wall); // Top
+    pushQuad({hw-wt, 0.5f, 12.0f}, {hw-wt, 0.5f, 6.0f}, {nx, 0.5f, 6.0f}, {nx, 0.5f, 12.0f}, {0,1,0}, {0,0},{1,0},{1,1},{0,1}, c_wall); // Bottom
+    pushQuad({hw-wt, 0.5f, 6.0f}, {hw-wt, h-1.5f, 6.0f}, {nx, h-1.5f, 6.0f}, {nx, 0.5f, 6.0f}, {0,0,1}, {0,0},{1,0},{1,1},{0,1}, c_wall);   // Left
+    pushQuad({nx, 0.5f, 12.0f}, {nx, h-1.5f, 12.0f}, {hw-wt, h-1.5f, 12.0f}, {hw-wt, 0.5f, 12.0f}, {0,0,-1}, {0,0},{1,0},{1,1},{0,1}, c_wall); // Right
     // Wall around niche
     pushQuad({hw-wt, 0, 6.0f}, {hw-wt, 0, 12.0f}, {hw-wt, 0.5f, 12.0f}, {hw-wt, 0.5f, 6.0f}, {-1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
     pushQuad({hw-wt, h-1.5f, 6.0f}, {hw-wt, h-1.5f, 12.0f}, {hw-wt, h, 12.0f}, {hw-wt, h, 6.0f}, {-1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
@@ -744,13 +745,13 @@ inline unsigned int createRetailStallVAO(int& outCount) {
     pushQuad({hw, 0, hd*2}, {hw, 0, wt}, {hw, h, wt}, {hw, h, hd*2}, {1,0,0}, {0,0},{1,0},{1,1},{0,1}, c_wall);
     
     // Baseboards
-    pushBox({0, 0.1f, wt + 0.05f}, {hw-wt, 0.15f, 0.05f}, c_metal);
-    pushBox({-hw+wt+0.05f, 0.1f, hd}, {0.05f, 0.15f, hd}, c_metal);
-    pushBox({hw-wt-0.05f, 0.1f, 3.0f}, {0.05f, 0.15f, 3.0f}, c_metal);
+    pushBox({0, 0.1f, wt + 0.051f}, {hw-wt, 0.15f, 0.05f}, c_metal);
+    pushBox({-hw+wt+0.051f, 0.1f, hd}, {0.05f, 0.15f, hd}, c_metal);
+    pushBox({hw-wt-0.051f, 0.1f, 3.0f}, {0.05f, 0.15f, 3.0f}, c_metal);
 
     // 2. The Architectural Storefront (Z = 16.0)
-    pushBox({-hw + 1.5f, h/2, hd*2}, {1.5f, h/2, 0.4f}, c_wall); // Left pillar
-    pushBox({hw - 1.5f, h/2, hd*2}, {1.5f, h/2, 0.4f}, c_wall);  // Right pillar
+    pushBox({-hw + 1.51f, h/2, hd*2}, {1.5f, h/2, 0.4f}, c_wall); // Left pillar
+    pushBox({hw - 1.51f, h/2, hd*2}, {1.5f, h/2, 0.4f}, c_wall);  // Right pillar
     
     float winWidth = (hw - 3.0f) - (-2.0f);
     float winCenter = -2.0f + winWidth/2.0f;
@@ -759,7 +760,7 @@ inline unsigned int createRetailStallVAO(int& outCount) {
     
     // 3. The 3D Marquee Signboard
     float marqueeH = 2.0f, marqueeY = h - marqueeH/2.0f;
-    pushBox({0, marqueeY, hd*2 + 0.1f}, {hw, marqueeH/2.0f, 0.3f}, c_marquee);
+    pushBox({0, marqueeY, hd*2 + 0.1f}, {hw - 0.01f, marqueeH/2.0f, 0.3f}, c_marquee);
     float mzf = hd*2 + 0.41f; // Marquee z-front canvas
     pushQuad({-hw, marqueeY - marqueeH/2, mzf}, {hw, marqueeY - marqueeH/2, mzf},
              {hw, marqueeY + marqueeH/2, mzf}, {-hw, marqueeY + marqueeH/2, mzf},
@@ -767,40 +768,43 @@ inline unsigned int createRetailStallVAO(int& outCount) {
 
     // 4. Interior Architecture & Props
     
-    // Center Display Table
+    // Center Display Table (y=0.8, halfExt=0.05 -> Top is 0.85)
     pushBox({0, 0.8f, hd}, {2.0f, 0.05f, 1.4f}, c_tableTop); 
     pushBox({0, 0.4f, hd}, {1.4f, 0.4f, 0.8f}, c_tableBase);  
-    addFoldedClothesStack(glm::vec3( 0.8f, 0.86f, hd + 0.5f));
-    addFoldedClothesStack(glm::vec3( 0.8f, 0.86f, hd - 0.5f));
-    addFoldedClothesStack(glm::vec3(-0.8f, 0.86f, hd + 0.5f));
-    addFoldedClothesStack(glm::vec3(-0.8f, 0.86f, hd - 0.5f));
+    // Shirt box halfExt=0.02. To clear 0.85, center must be 0.871f
+    addFoldedClothesStack(glm::vec3( 0.8f, 0.871f, hd + 0.5f));
+    addFoldedClothesStack(glm::vec3( 0.8f, 0.871f, hd - 0.5f));
+    addFoldedClothesStack(glm::vec3(-0.8f, 0.871f, hd + 0.5f));
+    addFoldedClothesStack(glm::vec3(-0.8f, 0.871f, hd - 0.5f));
 
-    // Sleek Checkout Counter at the rear
-    pushBox({0.0f, 0.6f, wt + 1.2f}, {3.0f, 0.6f, 0.6f}, glm::vec3(0.12f)); // Dark matte body
-    pushBox({0.0f, 1.22f, wt + 1.2f}, {3.1f, 0.03f, 0.7f}, glm::vec3(0.05f)); // Black top
-    addFoldedClothesStack(glm::vec3(1.5f, 1.26f, wt + 1.2f));
-    addFoldedClothesStack(glm::vec3(-1.5f, 1.26f, wt + 1.2f));
+    // Sleek Checkout Counter at the rear (y=1.22, halfExt=0.03 -> Top is 1.25)
+    pushBox({0.0f, 0.6f, wt + 1.2f}, {3.0f, 0.6f, 0.6f}, glm::vec3(0.12f)); 
+    pushBox({0.0f, 1.22f, wt + 1.2f}, {3.1f, 0.03f, 0.7f}, glm::vec3(0.05f)); 
+    // To clear 1.25, center must be 1.271f
+    addFoldedClothesStack(glm::vec3(1.5f, 1.271f, wt + 1.2f));
+    addFoldedClothesStack(glm::vec3(-1.5f, 1.271f, wt + 1.2f));
 
     // Four wooden shelves inside the niche
     for (int y = 0; y < 4; y++) {
         float shY = 2.0f + y*1.2f;
+        // Shelf Top: shY + 0.04f. Shelf Bottom: shY - 0.04f.
         pushBox({hw - wt/2.0f - 0.2f, shY, 9.0f}, {0.4f, 0.04f, 2.8f}, c_tableTop);
-        // Props on shelves
+        // Props on shelves. To clear shY + 0.04f, center must be shY + 0.061f.
         for(int s=0; s<4; s++) {
             float shZ = 6.8f + s*1.4f;
-            addFoldedClothesStack(glm::vec3(hw - wt/2.0f - 0.3f, shY + 0.05f, shZ));
-            addFoldedClothesStack(glm::vec3(hw - wt/2.0f - 0.1f, shY + 0.05f, shZ));
+            addFoldedClothesStack(glm::vec3(hw - wt/2.0f - 0.3f, shY + 0.061f, shZ));
+            addFoldedClothesStack(glm::vec3(hw - wt/2.0f - 0.1f, shY + 0.061f, shZ));
         }
         // Bar Light Geometric fixture tucked under the shelf!
-        pushBox({hw - wt/2.0f - 0.2f, shY - 0.06f, 9.0f}, {0.1f, 0.02f, 2.5f}, c_lamp);
+        pushBox({hw - wt/2.0f - 0.2f, shY - 0.061f, 9.0f}, {0.1f, 0.02f, 2.5f}, c_lamp);
     }
 
     // Ceiling Track Lights running front-to-back
-    pushBox({-4.0f, h - 0.05f, hd}, {0.1f, 0.05f, hd - 1.0f}, c_metal);
-    pushBox({ 4.0f, h - 0.05f, hd}, {0.1f, 0.05f, hd - 1.0f}, c_metal);
+    pushBox({-4.0f, h - 0.051f, hd}, {0.1f, 0.05f, hd - 1.0f}, c_metal);
+    pushBox({ 4.0f, h - 0.051f, hd}, {0.1f, 0.05f, hd - 1.0f}, c_metal);
     // Fluorescent fixtures attached to tracks
-    pushBox({-4.0f, h - 0.13f, hd}, {0.05f, 0.03f, hd - 1.2f}, c_lamp);
-    pushBox({ 4.0f, h - 0.13f, hd}, {0.05f, 0.03f, hd - 1.2f}, c_lamp);
+    pushBox({-4.0f, h - 0.132f, hd}, {0.05f, 0.03f, hd - 1.2f}, c_lamp);
+    pushBox({ 4.0f, h - 0.132f, hd}, {0.05f, 0.03f, hd - 1.2f}, c_lamp);
 
     // Clothing Racks (left side)
     auto buildRack = [&](glm::vec3 center) {
