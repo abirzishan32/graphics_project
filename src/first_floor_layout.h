@@ -876,7 +876,8 @@ inline void drawFirstFloorRetailStalls(float floorY, Shader& gouraudShader, unsi
 
     // Left Wall Stalls (x=depth/2, varying z, facing +x so rot=90)
     // 3 Stalls perfectly fill the lot depth (Lot Depth = 100, 3*26 = 78 footprint)
-    for (int i = 0; i < 3; i++) {
+    for (int i = 1; i < 3; i++) {
+        
         glm::mat4 m = glm::mat4(1.0f);
         m = glm::translate(m, glm::vec3(depth, floorY, 12.0f + i*(w + 2.0f) + w/2.0f));
         m = glm::rotate(m, glm::radians(90.0f), glm::vec3(0,1,0));
@@ -939,9 +940,6 @@ inline void drawFirstFloorRetailStalls(float floorY, Shader& gouraudShader, unsi
     // Back Wall Stalls (varying x, z=16, facing +z so rot=0)
     for (int i = 0; i < 3; i++) {
         glm::mat4 m = glm::mat4(1.0f);
-        // Correctly spacing out the 3 stalls perfectly in the 74m gap between the left/right walls.
-        // Left wall ends at X=32. Right wall starts at X=108.
-        // Spaces are 33 to 57, 58 to 82, 83 to 107. (Centers at 45, 70, 95).
         float sx = 70.0f + (i - 1) * (w + 1.0f);
         m = glm::translate(m, glm::vec3(sx, floorY, depth));
         gouraudShader.setMat4("model", m);
