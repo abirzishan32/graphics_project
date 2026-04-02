@@ -39,6 +39,7 @@ struct RenderContext {
     unsigned int texCartMenu  = 0;   // burger/pizza menu sign
     unsigned int texCoffeeLogo= 0;   // coffee shop logo
     unsigned int texTableTop  = 0;   // marble/wood for tabletop
+    unsigned int texRestaurantLogo = 0; // massive restaurant brand sign
 };
 
 inline RenderContext& ctx() {
@@ -54,7 +55,8 @@ inline void setRenderContext(Shader& shader,
                              int          cylSegments  = 16,
                              unsigned int texCartMenu  = 0,
                              unsigned int texCoffeeLogo= 0,
-                             unsigned int texTableTop  = 0) {
+                             unsigned int texTableTop  = 0,
+                             unsigned int texRestaurantLogo = 0) {
     RenderContext& c = ctx();
     c.shader        = &shader;
     c.cubeVAO       = cubeVAO;
@@ -65,6 +67,7 @@ inline void setRenderContext(Shader& shader,
     c.texCartMenu   = texCartMenu;
     c.texCoffeeLogo = texCoffeeLogo;
     c.texTableTop   = texTableTop;
+    c.texRestaurantLogo = texRestaurantLogo;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -253,12 +256,42 @@ inline unsigned int createLargeRestaurantVAO(int& outCount) {
     float marqueeY = h - marqueeH/2.0f;
     pushBox11(v, {0, marqueeY, hd - 0.5f}, {hw - wt, marqueeH/2.0f, 0.5f}, c_marquee);
     
-    // Marquee Perfect UV Canvas on front face (+Z)
-    float mzf = hd + 0.01f; // Just front of the marquee
-    pushQuad11(v, 
-        {-hw + wt, marqueeY - marqueeH/2, mzf}, {hw - wt, marqueeY - marqueeH/2, mzf},
-        {hw - wt, marqueeY + marqueeH/2, mzf}, {-hw + wt, marqueeY + marqueeH/2, mzf},
-        {0,0,1}, {0,0}, {1,0}, {1,1}, {0,1}, glm::vec3(1.0f));
+    // Marquee Perfect UV Canvas (Split into 3 panels to prevent stretching)
+    auto addMarquee = [&](glm::vec3 center, float totalWidth, float height, float logoWidth, glm::vec3 baseColor) {
+        float mzf = center.z + 0.01f;
+        float my = center.y;
+        float mh2 = height / 2.0f;
+        
+        float leftWidth = (totalWidth - logoWidth) / 2.0f;
+        float rightWidth = leftWidth;
+        
+        // Left Panel (Solid color, degenerate UVs so it samples an edge pixel or blends)
+        float lxMin = center.x - totalWidth/2.0f;
+        float lxMax = center.x - totalWidth/2.0f + leftWidth;
+        pushQuad11(v, 
+            {lxMin, my - mh2, mzf}, {lxMax, my - mh2, mzf},
+            {lxMax, my + mh2, mzf}, {lxMin, my + mh2, mzf},
+            {0,0,1}, {0,0}, {0,0}, {0,0}, {0,0}, baseColor);
+            
+        // Center Panel (Perfect UVs [0,1])
+        float cxMin = center.x - logoWidth/2.0f;
+        float cxMax = center.x + logoWidth/2.0f;
+        pushQuad11(v, 
+            {cxMin, my - mh2, mzf}, {cxMax, my - mh2, mzf},
+            {cxMax, my + mh2, mzf}, {cxMin, my + mh2, mzf},
+            {0,0,1}, {0,0}, {1,0}, {1,1}, {0,1}, glm::vec3(1.0f)); // White so texture isn't tinted
+            
+        // Right Panel (Solid color, degenerate UVs)
+        float rxMin = center.x + logoWidth/2.0f;
+        float rxMax = center.x + totalWidth/2.0f;
+        pushQuad11(v, 
+            {rxMin, my - mh2, mzf}, {rxMax, my - mh2, mzf},
+            {rxMax, my + mh2, mzf}, {rxMin, my + mh2, mzf},
+            {0,0,1}, {0,0}, {0,0}, {0,0}, {0,0}, baseColor);
+    };
+
+    // The restaurant logo is roughly a typical wide rectangle, maybe 5x2 meters.
+    addMarquee(glm::vec3(0, marqueeY, hd), (hw - wt) * 2.0f, marqueeH, 5.0f, c_marquee);
 
     // 4. Lambdas for Food Stuffs
     auto addDrinkCup = [&](glm::vec3 center, glm::vec3 color) {
@@ -516,7 +549,16 @@ inline void drawLargeRestaurants(float floorY, Shader& gouraudShader,
 
     gouraudShader.use();
     glBindVertexArray(resVAO);
-    gouraudShader.setInt("useTexture", 0);
+
+    RenderContext& c = ctx();
+    if (c.texRestaurantLogo != 0) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, c.texRestaurantLogo);
+        gouraudShader.setInt("texture1", 0);
+        gouraudShader.setInt("useTexture", 1);
+    } else {
+        gouraudShader.setInt("useTexture", 0);
+    }
 
     float spacingX = 18.0f; // restaurants are 16m wide, so 18m spacing
     float spacingZ = 20.0f; 
@@ -546,6 +588,9 @@ inline void drawLargeRestaurants(float floorY, Shader& gouraudShader,
         gouraudShader.setMat4("model", m);
         glDrawArrays(GL_TRIANGLES, 0, resCount);
     }
+    
+    // reset texture
+    gouraudShader.setInt("useTexture", 0);
 
     glBindVertexArray(0);
 }
