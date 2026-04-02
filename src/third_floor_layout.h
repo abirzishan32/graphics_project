@@ -83,6 +83,93 @@ static inline void pushQuad(std::vector<float>& v,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 11-FLOAT GEOMETRY HELPERS FOR RESTAURANT
+// stride = pos(3) + normal(3) + uv(2) + color(3) = 11 floats per vertex
+// ─────────────────────────────────────────────────────────────────────────────
+static inline void pushQuad11(std::vector<float>& v,
+    glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3,
+    glm::vec3 n,
+    glm::vec2 uv0, glm::vec2 uv1, glm::vec2 uv2, glm::vec2 uv3, glm::vec3 col) {
+    auto push = [&](glm::vec3 p, glm::vec2 uv) {
+        v.insert(v.end(), {p.x,p.y,p.z, n.x,n.y,n.z, uv.x,uv.y, col.r,col.g,col.b});
+    };
+    push(p0,uv0); push(p1,uv1); push(p2,uv2);
+    push(p0,uv0); push(p2,uv2); push(p3,uv3);
+}
+
+static inline void pushBox11(std::vector<float>& v, glm::vec3 center, glm::vec3 halfExtents, glm::vec3 col, glm::vec2 uvMin = {0,0}, glm::vec2 uvMax = {1,1}) {
+    float cx=center.x, cy=center.y, cz=center.z;
+    float hx=halfExtents.x, hy=halfExtents.y, hz=halfExtents.z;
+    pushQuad11(v, {cx-hx, cy-hy, cz+hz}, {cx+hx, cy-hy, cz+hz}, {cx+hx, cy+hy, cz+hz}, {cx-hx, cy+hy, cz+hz}, {0,0,1}, {uvMin.x, uvMin.y}, {uvMax.x, uvMin.y}, {uvMax.x, uvMax.y}, {uvMin.x, uvMax.y}, col);
+    pushQuad11(v, {cx+hx, cy-hy, cz-hz}, {cx-hx, cy-hy, cz-hz}, {cx-hx, cy+hy, cz-hz}, {cx+hx, cy+hy, cz-hz}, {0,0,-1}, {uvMin.x, uvMin.y}, {uvMax.x, uvMin.y}, {uvMax.x, uvMax.y}, {uvMin.x, uvMax.y}, col);
+    pushQuad11(v, {cx-hx, cy-hy, cz-hz}, {cx-hx, cy-hy, cz+hz}, {cx-hx, cy+hy, cz+hz}, {cx-hx, cy+hy, cz-hz}, {-1,0,0}, {uvMin.x, uvMin.y}, {uvMax.x, uvMin.y}, {uvMax.x, uvMax.y}, {uvMin.x, uvMax.y}, col);
+    pushQuad11(v, {cx+hx, cy-hy, cz+hz}, {cx+hx, cy-hy, cz-hz}, {cx+hx, cy+hy, cz-hz}, {cx+hx, cy+hy, cz+hz}, {1,0,0}, {uvMin.x, uvMin.y}, {uvMax.x, uvMin.y}, {uvMax.x, uvMax.y}, {uvMin.x, uvMax.y}, col);
+    pushQuad11(v, {cx-hx, cy+hy, cz+hz}, {cx+hx, cy+hy, cz+hz}, {cx+hx, cy+hy, cz-hz}, {cx-hx, cy+hy, cz-hz}, {0,1,0}, {uvMin.x, uvMin.y}, {uvMax.x, uvMin.y}, {uvMax.x, uvMax.y}, {uvMin.x, uvMax.y}, col);
+    pushQuad11(v, {cx-hx, cy-hy, cz-hz}, {cx+hx, cy-hy, cz-hz}, {cx+hx, cy-hy, cz+hz}, {cx-hx, cy-hy, cz+hz}, {0,-1,0}, {uvMin.x, uvMin.y}, {uvMax.x, uvMin.y}, {uvMax.x, uvMax.y}, {uvMin.x, uvMax.y}, col);
+}
+
+static inline void pushRotatedBox11(std::vector<float>& v, glm::vec3 center, glm::vec3 halfExtents, float angleY, glm::vec3 col) {
+    float s = sin(angleY), c = cos(angleY);
+    auto rotate = [&](float x, float z) -> glm::vec2 { return {x * c - z * s, x * s + z * c}; };
+    float hx = halfExtents.x, hy = halfExtents.y, hz = halfExtents.z;
+    glm::vec3 pts[8];
+    for(int i=0; i<8; i++) {
+        float x = (i & 1) ? hx : -hx;
+        float y = (i & 2) ? hy : -hy;
+        float z = (i & 4) ? hz : -hz;
+        glm::vec2 r = rotate(x, z);
+        pts[i] = center + glm::vec3(r.x, y, r.y);
+    }
+    auto pq = [&](int a, int b, int c_idx, int d, glm::vec3 n) { pushQuad11(v, pts[a], pts[b], pts[c_idx], pts[d], n, {0,0},{1,0},{1,1},{0,1}, col); };
+    glm::vec2 n1 = rotate(0, 1), n2 = rotate(0, -1), n3 = rotate(-1, 0), n4 = rotate(1, 0);
+    pq(4, 5, 7, 6, {n1.x, 0, n1.y}); 
+    pq(1, 0, 2, 3, {n2.x, 0, n2.y}); 
+    pq(0, 4, 6, 2, {n3.x, 0, n3.y}); 
+    pq(5, 1, 3, 7, {n4.x, 0, n4.y}); 
+    pq(2, 6, 7, 3, {0, 1, 0});       
+    pq(0, 1, 5, 4, {0, -1, 0});      
+}
+
+static inline void pushCylinder11(std::vector<float>& v, glm::vec3 center, float radius, float height, int slices, glm::vec3 col) {
+    float halfH = height * 0.5f;
+    float step = glm::two_pi<float>() / slices;
+    for (int i = 0; i < slices; i++) {
+        float a0 = i * step, a1 = (i + 1) * step;
+        float x0 = cos(a0) * radius, z0 = sin(a0) * radius;
+        float x1 = cos(a1) * radius, z1 = sin(a1) * radius;
+        glm::vec3 b0(center.x+x0, center.y-halfH, center.z+z0);
+        glm::vec3 b1(center.x+x1, center.y-halfH, center.z+z1);
+        glm::vec3 t0(center.x+x0, center.y+halfH, center.z+z0);
+        glm::vec3 t1(center.x+x1, center.y+halfH, center.z+z1);
+        glm::vec3 n0 = glm::normalize(glm::vec3(x0, 0, z0)), n1 = glm::normalize(glm::vec3(x1, 0, z1));
+        pushQuad11(v, b0, b1, t1, t0, glm::normalize(n0+n1), {0,0}, {1,0}, {1,1}, {0,1}, col);
+        // Top cap triangle
+        v.insert(v.end(), {center.x, center.y+halfH, center.z, 0,1,0, 0.5f,0.5f, col.r,col.g,col.b});
+        v.insert(v.end(), {t1.x, t1.y, t1.z, 0,1,0, 0.5f+x1/(2*radius), 0.5f+z1/(2*radius), col.r,col.g,col.b});
+        v.insert(v.end(), {t0.x, t0.y, t0.z, 0,1,0, 0.5f+x0/(2*radius), 0.5f+z0/(2*radius), col.r,col.g,col.b});
+    }
+}
+
+static inline unsigned int uploadVAO11(const std::vector<float>& verts) {
+    unsigned int VAO, VBO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(float), verts.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11*sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11*sizeof(float), (void*)(3*sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11*sizeof(float), (void*)(6*sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11*sizeof(float), (void*)(8*sizeof(float)));
+    glEnableVertexAttribArray(3);
+    glBindVertexArray(0);
+    return VAO;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // VAO helpers
 // ─────────────────────────────────────────────────────────────────────────────
 static inline unsigned int uploadVAO(const std::vector<float>& verts) {
@@ -135,140 +222,98 @@ static inline void appendCylinder(std::vector<float>& v,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. POTTED PLANT VAO (pot only — tree drawn via FractalTree)
+// LARGE RESTAURANT SHOP (11-float vertex geometry)
 // ─────────────────────────────────────────────────────────────────────────────
-
-inline unsigned int createPottedPlantVAO(int& outCount) {
-    const int segs = 20;
+inline unsigned int createLargeRestaurantVAO(int& outCount) {
     std::vector<float> v;
-    v.reserve(segs * 18 * 8);
 
-    // Pot body: short fat cylinder
-    appendCylinder(v, glm::vec3(0,0,0), 0.28f, 0.22f, segs, true);
-    // Rim ring: thin wide disc at top
-    appendCylinder(v, glm::vec3(0, 0.23f, 0), 0.31f, 0.025f, segs, false);
-    // Soil disc on top
-    for (int i = 0; i < segs; ++i) {
-        float a0 = glm::two_pi<float>()/segs*i, a1 = glm::two_pi<float>()/segs*(i+1);
-        float x0=cosf(a0)*0.27f, z0=sinf(a0)*0.27f;
-        float x1=cosf(a1)*0.27f, z1=sinf(a1)*0.27f;
-        glm::vec3 c(0, 0.245f, 0);
-        v.insert(v.end(),{c.x,c.y,c.z, 0,1,0, 0.5f,0.5f});
-        v.insert(v.end(),{c.x+x1,c.y,c.z+z1, 0,1,0, 0.5f+0.5f*cosf(a1),0.5f+0.5f*sinf(a1)});
-        v.insert(v.end(),{c.x+x0,c.y,c.z+z0, 0,1,0, 0.5f+0.5f*cosf(a0),0.5f+0.5f*sinf(a0)});
+    float hw = 8.0f;  // Width: 16m wide
+    float hd = 6.0f;  // Depth: 12m deep
+    float h = 6.0f;   // Height: 6m tall
+    float wt = 0.4f;  // Wall thickness
+    
+    glm::vec3 c_wall(0.95f, 0.95f, 0.92f); // Off-white walls
+    glm::vec3 c_divider(0.85f, 0.15f, 0.15f); // Brand color (Red or change later)
+    glm::vec3 c_desk(0.1f, 0.1f, 0.12f); // Dark marble serving desk
+    glm::vec3 c_marquee(0.8f, 0.8f, 0.85f);
+    glm::vec3 c_metal(0.3f, 0.3f, 0.3f);
+    
+    // 1. Back Wall & Floor/Ceiling bounds
+    pushBox11(v, {0, h/2, -hd + wt/2}, {hw, h/2, wt/2}, c_wall); // Back wall
+    pushBox11(v, {-hw + wt/2, h/2, 0}, {wt/2, h/2, hd}, c_divider); // Left Divider Wall
+    pushBox11(v, {hw - wt/2, h/2, 0}, {wt/2, h/2, hd}, c_divider); // Right Divider Wall
+    
+    // 2. The Massive Serving Desk spanning the storefront!
+    float deskZ = hd - 2.0f;  // Front edge
+    pushBox11(v, {0, 0.5f, deskZ}, {hw - wt, 0.5f, 1.5f}, c_desk); // Base of desk (1.0m tall, 3m deep)
+    pushBox11(v, {0, 1.02f, deskZ}, {hw - wt + 0.1f, 0.04f, 1.6f}, c_wall); // Countertop (white marble) overhanging slightly
+
+    // 3. Overhead Marquee / Signage
+    float marqueeH = 2.0f;
+    float marqueeY = h - marqueeH/2.0f;
+    pushBox11(v, {0, marqueeY, hd - 0.5f}, {hw - wt, marqueeH/2.0f, 0.5f}, c_marquee);
+    
+    // Marquee Perfect UV Canvas on front face (+Z)
+    float mzf = hd + 0.01f; // Just front of the marquee
+    pushQuad11(v, 
+        {-hw + wt, marqueeY - marqueeH/2, mzf}, {hw - wt, marqueeY - marqueeH/2, mzf},
+        {hw - wt, marqueeY + marqueeH/2, mzf}, {-hw + wt, marqueeY + marqueeH/2, mzf},
+        {0,0,1}, {0,0}, {1,0}, {1,1}, {0,1}, glm::vec3(1.0f));
+
+    // 4. Lambdas for Food Stuffs
+    auto addDrinkCup = [&](glm::vec3 center, glm::vec3 color) {
+        pushCylinder11(v, center + glm::vec3(0, 0.08f, 0), 0.05f, 0.16f, 12, color); // Cup
+        pushCylinder11(v, center + glm::vec3(0, 0.165f, 0), 0.055f, 0.01f, 12, glm::vec3(0.9f)); // Lid
+        pushCylinder11(v, center + glm::vec3(0, 0.20f, 0), 0.005f, 0.06f, 6, glm::vec3(0.1f)); // Straw
+    };
+    
+    auto addPizzaBox = [&](glm::vec3 center, glm::vec3 color) {
+        pushRotatedBox11(v, center + glm::vec3(0, 0.02f, 0), glm::vec3(0.3f, 0.02f, 0.3f), (rand()%100)/100.0f, color); // Flat box
+    };
+    
+    auto addFoodTray = [&](glm::vec3 center, glm::vec3 color) {
+        pushRotatedBox11(v, center + glm::vec3(0, 0.01f, 0), glm::vec3(0.35f, 0.01f, 0.25f), ((rand()%100) - 50)/200.0f, color);
+    };
+
+    // 5. Populate Serving Desk
+    float deskTop = 1.061f; // Y surface + 0.001 air gap to prevent Z fighting
+    
+    glm::vec3 colPizza(0.85f, 0.65f, 0.45f);
+    glm::vec3 colCupRed(0.8f, 0.1f, 0.1f);
+    glm::vec3 colCupBlue(0.1f, 0.3f, 0.8f);
+    glm::vec3 colTray(0.15f, 0.15f, 0.15f);
+
+    for (int i = 0; i < 15; i++) {
+        // Randomly place trays
+        float rx = -hw + 2.0f + (hw*2.0f - 4.0f) * ((float)rand()/RAND_MAX);
+        float rz = deskZ - 0.5f + ((float)rand()/RAND_MAX);
+        
+        addFoodTray(glm::vec3(rx, deskTop, rz), colTray);
+        
+        // Add food on tray
+        if (rand() % 2 == 0) {
+            addDrinkCup(glm::vec3(rx - 0.15f, deskTop + 0.02f, rz), colCupRed);
+        } else {
+            addDrinkCup(glm::vec3(rx + 0.15f, deskTop + 0.02f, rz), colCupBlue);
+        }
+        
+        if (rand() % 2 == 0) {
+            addPizzaBox(glm::vec3(rx, deskTop + 0.02f, rz), colPizza);
+            if (rand() % 2 == 0) addPizzaBox(glm::vec3(rx, deskTop + 0.06f, rz), colPizza);
+        }
+    }
+    
+    // Stack some pizza boxes generically at the back counter
+    for (int i=0; i<8; i++) {
+        float px = -hw + 1.5f + i * 2.0f;
+        int stacks = 3 + rand()%4;
+        for (int s=0; s<stacks; s++) {
+            addPizzaBox(glm::vec3(px, deskTop + s*0.04f, deskZ - 1.0f), colPizza);
+        }
     }
 
-    outCount = (int)(v.size() / 8);
-    return uploadVAO(v);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. FOOD CART VAO — UV-ready front & top faces
-// ─────────────────────────────────────────────────────────────────────────────
-
-inline unsigned int createFoodCartVAO(int& outCount) {
-    // Cart body: 1.6w x 1.0h x 0.8d, local origin at bottom-centre
-    const float W=0.8f, H=0.5f, D=0.4f; // half-extents
-    const float fullH = 1.0f; // full height (body=0.8, counter=0.2)
-    std::vector<float> v;
-
-    // --- BODY ---
-    // Front face (z=+D) — UV [0,1] for menu texture
-    pushQuad(v,
-        {-W,0,  D},{W,0,  D},{W,fullH*0.8f,D},{-W,fullH*0.8f,D},
-        {0,0,1}, {0,0},{1,0},{1,1},{0,1});
-    // Back face
-    pushQuad(v,
-        {W,0,-D},{-W,0,-D},{-W,fullH*0.8f,-D},{W,fullH*0.8f,-D},
-        {0,0,-1}, {0,0},{1,0},{1,1},{0,1});
-    // Left face
-    pushQuad(v,
-        {-W,0,-D},{-W,0,D},{-W,fullH*0.8f,D},{-W,fullH*0.8f,-D},
-        {-1,0,0}, {0,0},{1,0},{1,1},{0,1});
-    // Right face
-    pushQuad(v,
-        {W,0,D},{W,0,-D},{W,fullH*0.8f,-D},{W,fullH*0.8f,D},
-        {1,0,0}, {0,0},{1,0},{1,1},{0,1});
-    // Bottom
-    pushQuad(v,
-        {-W,0,-D},{W,0,-D},{W,0,D},{-W,0,D},
-        {0,-1,0}, {0,0},{1,0},{1,1},{0,1});
-
-    // --- COUNTER TOP (slightly wider, with UV [0,1] for logo/mat) ---
-    float cY = fullH*0.8f;
-    float cW = W+0.06f, cD = D+0.06f;
-    pushQuad(v,
-        {-cW,cY,-cD},{cW,cY,-cD},{cW,cY,cD},{-cW,cY,cD},
-        {0,1,0}, {0,0},{1,0},{1,1},{0,1});
-    // counter front lip
-    pushQuad(v,
-        {-cW,cY,cD},{cW,cY,cD},{cW,cY+0.08f,cD},{-cW,cY+0.08f,cD},
-        {0,0,1}, {0,0},{1,0},{1,1},{0,1});
-    // counter sides
-    pushQuad(v,
-        {-cW,cY,-cD},{-cW,cY+0.08f,-cD},{-cW,cY+0.08f,cD},{-cW,cY,cD},
-        {-1,0,0}, {0,0},{1,0},{1,1},{0,1});
-    pushQuad(v,
-        {cW,cY,cD},{cW,cY+0.08f,cD},{cW,cY+0.08f,-cD},{cW,cY,-cD},
-        {1,0,0}, {0,0},{1,0},{1,1},{0,1});
-
-    // --- KICK PANEL (bottom strip detail) ---
-    pushQuad(v,
-        {-W,0,D},{W,0,D},{W,0.12f,D},{-W,0.12f,D},
-        {0,0,1}, {0,0},{1,0},{1,1},{0,1});
-
-    outCount = (int)(v.size() / 8);
-    return uploadVAO(v);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. COFFEE SHOP COUNTER VAO
-// ─────────────────────────────────────────────────────────────────────────────
-
-inline unsigned int createCoffeeCounterVAO(int& outCount) {
-    // Longer L-shaped counter: 4.0w x 1.1h x 0.9d
-    const float W=2.0f, H=0.55f, D=0.45f;
-    std::vector<float> v;
-
-    // Front face — perfect UV for logo
-    pushQuad(v, {-W,0,D},{W,0,D},{W,H*2.0f,D},{-W,H*2.0f,D},
-        {0,0,1}, {0,0},{1,0},{1,1},{0,1});
-    // Back face
-    pushQuad(v, {W,0,-D},{-W,0,-D},{-W,H*2.0f,-D},{W,H*2.0f,-D},
-        {0,0,-1}, {0,0},{1,0},{1,1},{0,1});
-    // Left
-    pushQuad(v, {-W,0,-D},{-W,0,D},{-W,H*2.0f,D},{-W,H*2.0f,-D},
-        {-1,0,0}, {0,0},{1,0},{1,1},{0,1});
-    // Right
-    pushQuad(v, {W,0,D},{W,0,-D},{W,H*2.0f,-D},{W,H*2.0f,D},
-        {1,0,0}, {0,0},{1,0},{1,1},{0,1});
-    // Counter top — UV for texture
-    float cY = H*2.0f;
-    pushQuad(v, {-W,cY,-D},{W,cY,-D},{W,cY,D},{-W,cY,D},
-        {0,1,0}, {0,0},{1,0},{1,1},{0,1});
-
-    // Back shelf (half-depth, raised)
-    float sY = cY + 0.1f;
-    float sW = W*0.9f, sD = D*0.5f;
-    // shelf top
-    pushQuad(v, {-sW,sY,-D},{sW,sY,-D},{sW,sY,-D+sD},{-sW,sY,-D+sD},
-        {0,1,0}, {0,0},{1,0},{1,1},{0,1});
-    // shelf front lip
-    pushQuad(v, {-sW,sY,-D+sD},{sW,sY,-D+sD},{sW,sY+0.05f,-D+sD},{-sW,sY+0.05f,-D+sD},
-        {0,0,1}, {0,0},{1,0},{1,1},{0,1});
-
-    // Overhead signboard (wide flat board)
-    float signY = cY + 1.4f;
-    pushQuad(v, {-W,signY-0.05f,-D-0.02f},{W,signY-0.05f,-D-0.02f},
-                {W,signY+0.22f,-D-0.02f},{-W,signY+0.22f,-D-0.02f},
-        {0,0,-1}, {0,0},{1,0},{1,1},{0,1});
-    // front of signboard — UV for coffee logo
-    pushQuad(v, {-W,signY-0.05f,D+0.01f},{W,signY-0.05f,D+0.01f},
-                {W,signY+0.22f,D+0.01f},{-W,signY+0.22f,D+0.01f},
-        {0,0,1}, {0,0},{1,0},{1,1},{0,1});
-
-    outCount = (int)(v.size() / 8);
-    return uploadVAO(v);
+    outCount = (int)(v.size() / 11);
+    return uploadVAO11(v);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -460,206 +505,49 @@ inline void drawFoodCourtVendors() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DRAW: POTTED PLANT WALLS (Left = -X wall, Right = +X wall)
+// DRAW: LARGE RESTAURANTS (Lining the Left, Right, and Back Walls)
 // ─────────────────────────────────────────────────────────────────────────────
+inline void drawLargeRestaurants(float floorY, Shader& gouraudShader, 
+                                 float worldCenterX, float worldCenterZ, 
+                                 float roomHalfW, float roomHalfD) {
+    static unsigned int resVAO = 0; 
+    static int resCount = 0;
+    if (resVAO == 0) resVAO = createLargeRestaurantVAO(resCount);
 
-inline void drawPlantWalls(float floorY,
-                            float worldCenterX,
-                            float worldCenterZ,
-                            float roomHalfW,
-                            float roomHalfD,
-                            float spacing = 4.5f) {
-    RenderContext& c = ctx();
-    if (!c.shader || c.cylVAO == 0) return;
-    Shader& s = *c.shader;
+    gouraudShader.use();
+    glBindVertexArray(resVAO);
+    gouraudShader.setInt("useTexture", 0);
 
-    // Static pot VAO (created once)
-    static unsigned int potVAO   = 0;
-    static int          potCount = 0;
-    if (potVAO == 0) potVAO = createPottedPlantVAO(potCount);
+    float spacingX = 18.0f; // restaurants are 16m wide, so 18m spacing
+    float spacingZ = 20.0f; 
 
-    glm::vec3 potColor(0.42f, 0.24f, 0.12f);  // terracotta
-    glm::vec3 soilColor(0.25f, 0.16f, 0.08f);
-
-    FractalTree::Style plantStyle = FractalTree::makeAtriumStyle();
-    // Override for compact indoor plants
-    plantStyle.branchFactor  = 3;
-    plantStyle.tiltDegrees   = 38.0f;
-    plantStyle.lengthRatio   = 0.68f;
-    plantStyle.leafScale     = 0.14f;
-    plantStyle.leafClusterCount = 5;
-
-    auto drawPottedPlant = [&](glm::vec3 pos) {
-        // Draw pot
-        glm::mat4 m = glm::translate(glm::mat4(1.0f), pos);
-        m = glm::scale(m, glm::vec3(1.0f));
-        setMat(s, m);
-        setColor(s, potColor, 0.18f, 0.60f, 0.35f, 24.0f);
-        s.setInt("useTexture", 0);
-        glBindVertexArray(potVAO);
-        glDrawArrays(GL_TRIANGLES, 0, potCount);
-
-        // Draw fractal tree from soil surface
-        glm::vec3 treeRoot = pos + glm::vec3(0, 0.26f, 0);
-        FractalTree::drawFractalTree(s, c.cubeVAO, c.cylVAO, c.cylSegments,
-                                     c.sphereVAO, c.sphereCount,
-                                     treeRoot, 3, 0.45f, 0.045f,
-                                     plantStyle, pos.x * 0.07f + pos.z * 0.13f);
-    };
-
-    // Left wall  (x = -roomHalfW + wallOffset)
+    // Left Wall (-X) facing right
     float wxL = worldCenterX - roomHalfW + 1.0f;
+    for (float z = worldCenterZ - roomHalfD + 12.0f; z <= worldCenterZ + roomHalfD - 12.0f; z += spacingZ) {
+        glm::mat4 m = glm::translate(glm::mat4(1.0f), glm::vec3(wxL, floorY, z));
+        m = glm::rotate(m, glm::radians(90.0f), glm::vec3(0,1,0));
+        gouraudShader.setMat4("model", m);
+        glDrawArrays(GL_TRIANGLES, 0, resCount);
+    }
+    
+    // Right Wall (+X) facing left
     float wxR = worldCenterX + roomHalfW - 1.0f;
-    for (float z = worldCenterZ - roomHalfD + 2.0f; z <= worldCenterZ + roomHalfD - 2.0f; z += spacing) {
-        drawPottedPlant(glm::vec3(wxL, floorY, z));
-        drawPottedPlant(glm::vec3(wxR, floorY, z));
+    for (float z = worldCenterZ - roomHalfD + 12.0f; z <= worldCenterZ + roomHalfD - 12.0f; z += spacingZ) {
+        glm::mat4 m = glm::translate(glm::mat4(1.0f), glm::vec3(wxR, floorY, z));
+        m = glm::rotate(m, glm::radians(-90.0f), glm::vec3(0,1,0));
+        gouraudShader.setMat4("model", m);
+        glDrawArrays(GL_TRIANGLES, 0, resCount);
     }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DRAW: FOOD OUTLETS (Front wall = +Z, Back wall = -Z)
-// 3 food carts on +Z wall, 1 coffee shop on -Z wall
-// ─────────────────────────────────────────────────────────────────────────────
-
-inline void drawFoodOutlets(float floorY,
-                             float worldCenterX,
-                             float worldCenterZ,
-                             float roomHalfW,
-                             float roomHalfD) {
-    RenderContext& c = ctx();
-    if (!c.shader || c.cubeVAO == 0) return;
-    Shader& s = *c.shader;
-
-    static unsigned int cartVAO    = 0; static int cartCount    = 0;
-    static unsigned int coffeeVAO  = 0; static int coffeeCount  = 0;
-    if (cartVAO   == 0) cartVAO   = createFoodCartVAO(cartCount);
-    if (coffeeVAO == 0) coffeeVAO = createCoffeeCounterVAO(coffeeCount);
-
-    glm::vec3 cartBodyColor(0.90f, 0.90f, 0.92f);
-    glm::vec3 cartAccent(0.95f, 0.38f, 0.12f);
-    glm::vec3 coffeeColor(0.28f, 0.16f, 0.08f);
-    glm::vec3 coffeeAccent(0.12f, 0.08f, 0.05f);
-    glm::vec3 signYellow(0.98f, 0.85f, 0.10f);
-    glm::vec3 awningRed(0.85f, 0.15f, 0.15f);
-    glm::vec3 awningWhite(0.97f, 0.97f, 0.97f);
-    glm::vec3 stripeBlue(0.10f, 0.30f, 0.75f);
-
-    float frontZ  = worldCenterZ + roomHalfD - 0.8f;
-    float backZ   = worldCenterZ - roomHalfD + 1.2f;
-
-    // ── 3 FOOD CARTS on front wall ──
-    float cartSpacing = (roomHalfW * 1.6f) / 4.0f;
-    float cartXStart  = -roomHalfW * 0.8f + cartSpacing;
-    glm::vec3 cartColors[3] = {
-        glm::vec3(0.95f,0.20f,0.20f),  // Burger — red
-        glm::vec3(0.15f,0.55f,0.85f),  // Pizza  — blue
-        glm::vec3(0.20f,0.70f,0.30f)   // Tacos  — green
-    };
-
-    for (int i = 0; i < 3; ++i) {
-        float cx = cartXStart + i * cartSpacing;
-        glm::vec3 origin(worldCenterX + cx, floorY, frontZ);
-        glm::mat4 mCart = glm::translate(glm::mat4(1.0f), origin);
-        mCart = glm::rotate(mCart, glm::radians(180.0f), glm::vec3(0,1,0));
-
-        // Bind cart menu texture if available
-        if (c.texCartMenu != 0) {
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, c.texCartMenu);
-            s.setInt("texture1", 0);
-            s.setInt("useTexture", 1);
-        } else {
-            s.setInt("useTexture", 0);
-        }
-
-        setMat(s, mCart);
-        setColor(s, cartColors[i], 0.20f, 0.65f, 0.40f, 28.0f);
-        glBindVertexArray(cartVAO);
-        glDrawArrays(GL_TRIANGLES, 0, cartCount);
-
-        s.setInt("useTexture", 0);
-
-        // Canopy poles (two cylinders)
-        glm::mat4 poleL = TRS(origin + glm::vec3(-0.65f, 1.0f, 0.02f), 0.0f, glm::vec3(0.04f, 0.7f, 0.04f));
-        setMat(s, poleL); setColor(s, glm::vec3(0.3f), 0.2f, 0.5f, 0.8f, 64.0f);
-        glBindVertexArray(c.cylVAO);
-        glDrawArrays(GL_TRIANGLES, 0, c.cylSegments * 12);
-
-        glm::mat4 poleR = TRS(origin + glm::vec3( 0.65f, 1.0f, 0.02f), 0.0f, glm::vec3(0.04f, 0.7f, 0.04f));
-        setMat(s, poleR);
-        glDrawArrays(GL_TRIANGLES, 0, c.cylSegments * 12);
-
-        // Canopy roof (flat cube, striped accent color)
-        drawCubeRotated(s, c.cubeVAO, origin + glm::vec3(0, 1.72f, -0.1f),
-                        glm::vec3(1.5f, 0.06f, 0.65f), glm::vec3(0,0,0),
-                        (i%2==0) ? awningRed : signYellow, 0, 0.3f,0.6f,0.2f,8.f);
-
-        // Signboard above counter
-        drawCubeRotated(s, c.cubeVAO, origin + glm::vec3(0, 2.0f, -0.05f),
-                        glm::vec3(1.1f, 0.28f, 0.05f), glm::vec3(0,0,0),
-                        cartColors[i], 0, 0.3f,0.5f,0.3f,16.f);
-
-        // Small sphere decorative knob on top of each pole
-        glm::mat4 knobL = TRS(origin+glm::vec3(-0.65f,1.70f,0.02f),0,glm::vec3(0.07f));
-        setMat(s,knobL); setColor(s,glm::vec3(0.9f,0.8f,0.1f),0.3f,0.5f,0.9f,80.f);
-        glBindVertexArray(c.sphereVAO);
-        glDrawElements(GL_TRIANGLES, c.sphereCount, GL_UNSIGNED_INT, 0);
-        glm::mat4 knobR = TRS(origin+glm::vec3(0.65f,1.70f,0.02f),0,glm::vec3(0.07f));
-        setMat(s,knobR);
-        glDrawElements(GL_TRIANGLES, c.sphereCount, GL_UNSIGNED_INT, 0);
-
-        // Small potted condiments on counter top
-        glm::mat4 condim = TRS(origin+glm::vec3(0.3f, 1.10f,-0.1f),0,glm::vec3(0.09f,0.16f,0.09f));
-        setMat(s,condim); setColor(s,glm::vec3(0.8f,0.1f,0.1f),0.2f,0.6f,0.5f,32.f);
-        glBindVertexArray(c.cylVAO);
-        glDrawArrays(GL_TRIANGLES, 0, c.cylSegments*12);
+    
+    // Back Wall (-Z) facing forward
+    float backZ = worldCenterZ - roomHalfD + 1.2f;
+    for (float x = worldCenterX - roomHalfW + 24.0f; x <= worldCenterX + roomHalfW - 24.0f; x += spacingX) {
+        glm::mat4 m = glm::translate(glm::mat4(1.0f), glm::vec3(x, floorY, backZ));
+        gouraudShader.setMat4("model", m);
+        glDrawArrays(GL_TRIANGLES, 0, resCount);
     }
 
-    // ── COFFEE SHOP on back wall ──
-    glm::vec3 coffeeOrigin(worldCenterX, floorY, backZ);
-    glm::mat4 mCoffee = glm::translate(glm::mat4(1.0f), coffeeOrigin);
-
-    if (c.texCoffeeLogo != 0) {
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, c.texCoffeeLogo);
-        s.setInt("texture1", 0);
-        s.setInt("useTexture", 1);
-    } else {
-        s.setInt("useTexture", 0);
-    }
-    setMat(s, mCoffee);
-    setColor(s, coffeeColor, 0.18f, 0.60f, 0.50f, 40.0f);
-    glBindVertexArray(coffeeVAO);
-    glDrawArrays(GL_TRIANGLES, 0, coffeeCount);
-    s.setInt("useTexture", 0);
-
-    // Espresso machine (cylinders stacked)
-    glm::vec3 machinePos = coffeeOrigin + glm::vec3(-0.8f, 1.2f, -0.2f);
-    glm::mat4 machBody = TRS(machinePos, 0, glm::vec3(0.22f,0.26f,0.20f));
-    setMat(s,machBody); setColor(s,glm::vec3(0.72f,0.72f,0.75f),0.2f,0.5f,0.9f,80.f);
-    glBindVertexArray(c.cylVAO);
-    glDrawArrays(GL_TRIANGLES, 0, c.cylSegments*12);
-
-    // Coffee cups stacked on counter
-    for (int ci = 0; ci < 3; ++ci) {
-        glm::mat4 cup = TRS(coffeeOrigin + glm::vec3(0.5f + ci*0.22f, 1.18f, -0.15f),
-                            0, glm::vec3(0.08f,0.10f,0.08f));
-        setMat(s,cup); setColor(s,glm::vec3(0.97f,0.97f,0.97f),0.25f,0.55f,0.4f,24.f);
-        glDrawArrays(GL_TRIANGLES, 0, c.cylSegments*12);
-    }
-
-    // Overhead pendant lights above coffee shop
-    for (int li = -1; li <= 1; ++li) {
-        glm::vec3 lp = coffeeOrigin + glm::vec3(li * 1.2f, 2.8f, 0.0f);
-        glm::mat4 lm = TRS(lp, 0, glm::vec3(0.12f, 0.18f, 0.12f));
-        setMat(s,lm); setColor(s,glm::vec3(1.0f,0.92f,0.70f),0.9f,0.3f,0.1f,4.f);
-        glBindVertexArray(c.cylVAO);
-        glDrawArrays(GL_TRIANGLES, 0, c.cylSegments*12);
-        // cord
-        glm::mat4 cord = TRS(coffeeOrigin+glm::vec3(li*1.2f,3.35f,0),0,glm::vec3(0.018f,0.55f,0.018f));
-        setMat(s,cord); setColor(s,glm::vec3(0.1f),0.1f,0.3f,0.1f,4.f);
-        glDrawArrays(GL_TRIANGLES, 0, c.cylSegments*12);
-    }
+    glBindVertexArray(0);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -731,12 +619,9 @@ inline void drawSeatingArea(float floorY,
 // MASTER DRAW FUNCTION
 // ─────────────────────────────────────────────────────────────────────────────
 
-inline void initFoodCourt(float floorY, float worldCenterX, float worldCenterZ, float roomHalfW, float roomHalfD) {
-    initFoodCourtVendors(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD, 3);
-}
-
 inline void drawThirdFloor(float floorY,
                             float deltaTime,
+                            Shader& gouraudShader,
                             float worldCenterX = 70.0f,
                             float worldCenterZ = 50.0f,
                             float roomHalfW = 60.0f,
@@ -745,21 +630,14 @@ inline void drawThirdFloor(float floorY,
     roomHalfW = std::max(18.0f, std::min(roomHalfW, 60.0f));
     roomHalfD = std::max(22.0f, std::min(roomHalfD, 40.0f));
 
-    // Initialise vendors on first call
-    if (g_vendors.empty())
-        initFoodCourt(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD);
+    // 1. Large Restaurants lining Left, Right, & Back walls (uses 11-float shader)
+    drawLargeRestaurants(floorY, gouraudShader, worldCenterX, worldCenterZ, roomHalfW, roomHalfD);
 
-    // 1. Fractal potted plants lining Left & Right walls
-    drawPlantWalls(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD, 8.5f);
+    // Switch back to standard shader for 8-float items
+    RenderContext& c = ctx();
+    if (c.shader) c.shader->use();
 
-    // 2. Food carts & coffee shop on Front & Back walls
-    drawFoodOutlets(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD);
-
-    // 3. Vendor NPCs behind counters
-    updateFoodCourtVendors(deltaTime);
-    drawFoodCourtVendors();
-
-    // 4. Fancy circular seating in central area
+    // 2. Fancy circular seating in central area
     drawSeatingArea(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD, 6, 8, 6.0f, 6.0f);
 }
 

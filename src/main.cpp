@@ -1587,7 +1587,7 @@ void drawStackedEmptyFloors(Shader& shader, Shader& gouraudShader, unsigned int 
             SecondFloorDesign::drawSecondFloorLayout(floorY, ceilingY);
         } else if (floor == 3) {
             ThirdFloorDesign::setRenderContext(shader, cubeVAO, cylVAO, sphereVAO, sphereCount, 16);
-            ThirdFloorDesign::drawThirdFloor(floorY, deltaTime, LOT_WIDTH * 0.5f, LOT_DEPTH * 0.5f);
+            ThirdFloorDesign::drawThirdFloor(floorY, deltaTime, gouraudShader, LOT_WIDTH * 0.5f, LOT_DEPTH * 0.5f);
         }
 
         shader.setInt("useTexture", 0);
