@@ -92,8 +92,8 @@ const float PILLAR_SIZE = 0.5f;
 const float SPOT_WIDTH = 2.5f;
 const float SPOT_DEPTH = 5.0f;
 const float LANE_WIDTH = 6.0f;
-const int EXTRA_FLOORS = 5;
-const int TOP_FLOOR_INDEX = 5;
+const int EXTRA_FLOORS = 4;
+const int TOP_FLOOR_INDEX = 4;
 const float FLOOR_TO_FLOOR_HEIGHT = 8.0f;
 
 // Camera - starts in front of the outdoor escalator at pedestrian height
@@ -1558,6 +1558,12 @@ void drawStackedEmptyFloors(Shader& shader, Shader& gouraudShader, unsigned int 
                                 concreteColor, 0, 0.12f, 0.65f, 0.2f, 20.0f,
                                 elevator.shaftCenter.x, elevator.shaftCenter.z,
                                 shaftOpeningW, shaftOpeningD, false);
+        }
+
+        // Topmost level is the roof deck; do not generate enclosed floor walls/windows there.
+        if (floor == EXTRA_FLOORS) {
+            shader.setInt("useTexture", 0);
+            continue;
         }
 
         float windowY = floorY + wallHeight * 0.58f;
