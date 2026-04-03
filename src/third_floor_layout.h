@@ -468,12 +468,187 @@ static inline glm::mat4 TRS(glm::vec3 t, float ry, glm::vec3 sc) {
 // NPC VENDOR SYSTEM
 // ─────────────────────────────────────────────────────────────────────────────
 
-struct FoodCourtVendor {
-    NPCShared::NPC npc;
-    bool           isCoffeeBarista = false;
+struct StallAnchor {
+    glm::vec3 origin = glm::vec3(0.0f);
+    float yawDeg = 0.0f;
 };
 
+struct FoodCourtVendor {
+    NPCShared::NPC npc;
+    int stallIndex = -1;
+};
+
+struct QueueSpot {
+    glm::vec3 position = glm::vec3(0.0f);
+    float facingYaw = 0.0f;
+    int stallIndex = -1;
+    int order = 0;
+};
+
+struct FoodCourtCustomer {
+    enum class State {
+        WALKING,
+        GOING_TO_QUEUE,
+        QUEUING
+    };
+
+    NPCShared::NPC npc;
+    State state = State::WALKING;
+    int queueSpotIndex = -1;
+    float stateTimer = 0.0f;
+};
+
+static std::vector<StallAnchor> g_stallAnchors;
 static std::vector<FoodCourtVendor> g_vendors;
+static std::vector<QueueSpot> g_queueSpots;
+static std::vector<int> g_queueOccupancy;
+static std::vector<FoodCourtCustomer> g_customers;
+
+inline float rand01() {
+    return (float)(std::rand() % 10000) / 10000.0f;
+}
+
+inline float randRange(float lo, float hi) {
+    return lo + (hi - lo) * rand01();
+}
+
+inline glm::vec3 rotateYLocal(const glm::vec3& local, float yawDeg) {
+    float r = glm::radians(yawDeg);
+    float c = std::cos(r);
+    float s = std::sin(r);
+    return glm::vec3(c * local.x + s * local.z, local.y, -s * local.x + c * local.z);
+}
+
+inline glm::vec3 anchorToWorld(const StallAnchor& anchor, const glm::vec3& local) {
+    return anchor.origin + rotateYLocal(local, anchor.yawDeg);
+}
+
+inline void collectRestaurantStallAnchors(float floorY,
+                                          float worldCenterX,
+                                          float worldCenterZ,
+                                          float roomHalfW,
+                                          float roomHalfD,
+                                          std::vector<StallAnchor>& outAnchors) {
+    outAnchors.clear();
+
+    float spacingX = 18.0f;
+    float spacingZ = 20.0f;
+
+    float wxL = worldCenterX - roomHalfW + 1.0f;
+    for (float z = worldCenterZ - roomHalfD + 12.0f; z <= worldCenterZ + roomHalfD - 12.0f; z += spacingZ) {
+        StallAnchor a;
+        a.origin = glm::vec3(wxL, floorY, z);
+        a.yawDeg = 90.0f;
+        outAnchors.push_back(a);
+    }
+
+    float wxR = worldCenterX + roomHalfW - 1.0f;
+    for (float z = worldCenterZ - roomHalfD + 12.0f; z <= worldCenterZ + roomHalfD - 12.0f; z += spacingZ) {
+        StallAnchor a;
+        a.origin = glm::vec3(wxR, floorY, z);
+        a.yawDeg = -90.0f;
+        outAnchors.push_back(a);
+    }
+
+    float backZ = worldCenterZ - roomHalfD + 1.2f;
+    for (float x = worldCenterX - roomHalfW + 24.0f; x <= worldCenterX + roomHalfW - 24.0f; x += spacingX) {
+        StallAnchor a;
+        a.origin = glm::vec3(x, floorY, backZ);
+        a.yawDeg = 0.0f;
+        outAnchors.push_back(a);
+    }
+}
+
+inline glm::vec3 randomFoodCourtWalkTarget(float floorY,
+                                            float worldCenterX,
+                                            float worldCenterZ,
+                                            float roomHalfW,
+                                            float roomHalfD) {
+    float marginX = 10.0f;
+    float marginZ = 10.0f;
+    return glm::vec3(
+        randRange(worldCenterX - roomHalfW + marginX, worldCenterX + roomHalfW - marginX),
+        floorY,
+        randRange(worldCenterZ - roomHalfD + marginZ, worldCenterZ + roomHalfD - marginZ)
+    );
+}
+
+inline void initQueueSpotsFromStalls() {
+    if (!g_queueSpots.empty()) return;
+
+    const int spotsPerStall = 4;
+    g_queueSpots.reserve(g_stallAnchors.size() * spotsPerStall);
+    g_queueOccupancy.assign(g_stallAnchors.size() * spotsPerStall, -1);
+
+    for (int s = 0; s < (int)g_stallAnchors.size(); ++s) {
+        for (int o = 0; o < spotsPerStall; ++o) {
+            QueueSpot spot;
+            spot.position = anchorToWorld(g_stallAnchors[s], glm::vec3(0.0f, 0.0f, 7.2f + 1.15f * o));
+            spot.facingYaw = g_stallAnchors[s].yawDeg + 180.0f;
+            spot.stallIndex = s;
+            spot.order = o;
+            g_queueSpots.push_back(spot);
+        }
+    }
+}
+
+inline int reserveQueueSpotForStall(int stallIndex, int customerIndex) {
+    const int spotsPerStall = 4;
+    int base = stallIndex * spotsPerStall;
+    int order = 0;
+    while (order < spotsPerStall && g_queueOccupancy[base + order] != -1) {
+        order++;
+    }
+    if (order >= spotsPerStall) return -1;
+
+    int idx = base + order;
+    g_queueOccupancy[idx] = customerIndex;
+    return idx;
+}
+
+inline void compactQueueForStall(int stallIndex) {
+    const int spotsPerStall = 4;
+    int base = stallIndex * spotsPerStall;
+
+    bool moved = true;
+    while (moved) {
+        moved = false;
+        for (int o = 1; o < spotsPerStall; ++o) {
+            int prev = base + (o - 1);
+            int cur = base + o;
+            if (g_queueOccupancy[prev] == -1 && g_queueOccupancy[cur] != -1) {
+                int customerIdx = g_queueOccupancy[cur];
+                g_queueOccupancy[cur] = -1;
+                g_queueOccupancy[prev] = customerIdx;
+
+                FoodCourtCustomer& customer = g_customers[customerIdx];
+                customer.queueSpotIndex = prev;
+                customer.state = FoodCourtCustomer::State::GOING_TO_QUEUE;
+                customer.npc.targetPosition = g_queueSpots[prev].position;
+                moved = true;
+            }
+        }
+    }
+}
+
+inline bool assignCustomerToQueue(int customerIndex) {
+    if (g_stallAnchors.empty() || g_queueSpots.empty()) return false;
+
+    int stallCount = (int)g_stallAnchors.size();
+    int start = std::rand() % stallCount;
+    for (int t = 0; t < stallCount; ++t) {
+        int stall = (start + t) % stallCount;
+        int spotIdx = reserveQueueSpotForStall(stall, customerIndex);
+        if (spotIdx != -1) {
+            FoodCourtCustomer& customer = g_customers[customerIndex];
+            customer.queueSpotIndex = spotIdx;
+            customer.state = FoodCourtCustomer::State::GOING_TO_QUEUE;
+            customer.npc.targetPosition = g_queueSpots[spotIdx].position;
+            return true;
+        }
+    }
+    return false;
+}
 
 inline void initFoodCourtVendors(float floorY,
                                   float worldCenterX,
@@ -481,45 +656,77 @@ inline void initFoodCourtVendors(float floorY,
                                   float roomHalfW,
                                   float roomHalfD,
                                   int   cartCount = 3) {
+    (void)cartCount;
+
+    if (g_stallAnchors.empty()) {
+        collectRestaurantStallAnchors(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD, g_stallAnchors);
+    }
     if (!g_vendors.empty()) return;
 
     glm::vec3 apronRed(0.80f, 0.12f, 0.12f);
     glm::vec3 apronGreen(0.12f, 0.55f, 0.28f);
     glm::vec3 apronBrown(0.45f, 0.25f, 0.10f);
     glm::vec3 apronBlue(0.15f, 0.30f, 0.70f);
-
     glm::vec3 aprons[] = { apronRed, apronGreen, apronBrown, apronBlue };
 
-    // Front-wall cart vendors
-    float spacingX = (roomHalfW * 1.6f) / (cartCount + 1);
-    float startX   = -roomHalfW * 0.8f + spacingX;
-    float frontWallZ = worldCenterZ + roomHalfD;
-    for (int i = 0; i < cartCount; ++i) {
-        FoodCourtVendor fv;
-        fv.npc.position       = glm::vec3(worldCenterX + startX + i*spacingX, floorY, frontWallZ - 1.4f);
-        fv.npc.targetPosition = fv.npc.position;
-        fv.npc.rotationY      = 180.0f;  // face toward room
-        fv.npc.speed          = 0.0f;
-        fv.npc.walkCycleTime  = (float)i * 1.1f;
-        fv.npc.gender         = (i % 2 == 0) ? NPCShared::MALE : NPCShared::FEMALE;
-        fv.npc.clothingColor  = aprons[i % 4];
-        g_vendors.push_back(fv);
+    for (int s = 0; s < (int)g_stallAnchors.size(); ++s) {
+        const StallAnchor& a = g_stallAnchors[s];
+        for (int k = 0; k < 2; ++k) {
+            FoodCourtVendor fv;
+            float localX = (k == 0) ? -1.8f : 1.8f;
+            fv.npc.position = anchorToWorld(a, glm::vec3(localX, 0.0f, 2.35f));
+            fv.npc.targetPosition = fv.npc.position;
+            fv.npc.rotationY = a.yawDeg;
+            fv.npc.speed = 0.0f;
+            fv.npc.walkCycleTime = randRange(0.0f, 6.0f);
+            fv.npc.gender = ((s + k) % 2 == 0) ? NPCShared::MALE : NPCShared::FEMALE;
+            fv.npc.clothingColor = aprons[(s + k) % 4];
+            fv.stallIndex = s;
+            g_vendors.push_back(fv);
+        }
+    }
+}
+
+inline void initFoodCourtCustomers(float floorY,
+                                   float worldCenterX,
+                                   float worldCenterZ,
+                                   float roomHalfW,
+                                   float roomHalfD,
+                                   int customerCount = 30) {
+    if (!g_customers.empty()) return;
+
+    g_customers.reserve(customerCount);
+    for (int i = 0; i < customerCount; ++i) {
+        FoodCourtCustomer c;
+        c.npc.position = randomFoodCourtWalkTarget(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD);
+        c.npc.targetPosition = randomFoodCourtWalkTarget(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD);
+        glm::vec3 dir = c.npc.targetPosition - c.npc.position;
+        c.npc.rotationY = glm::degrees(std::atan2(dir.x, dir.z));
+        c.npc.speed = randRange(0.85f, 1.45f);
+        c.npc.walkCycleTime = randRange(0.0f, 8.0f);
+        c.npc.gender = (std::rand() % 2 == 0) ? NPCShared::MALE : NPCShared::FEMALE;
+        c.npc.clothingColor = glm::vec3(randRange(0.20f, 0.95f), randRange(0.20f, 0.95f), randRange(0.20f, 0.95f));
+        c.state = FoodCourtCustomer::State::WALKING;
+        g_customers.push_back(c);
     }
 
-    // Back-wall coffee barista
-    {
-        float backWallZ = worldCenterZ - roomHalfD;
-        FoodCourtVendor fv;
-        fv.npc.position       = glm::vec3(worldCenterX, floorY, backWallZ + 1.5f);
-        fv.npc.targetPosition = fv.npc.position;
-        fv.npc.rotationY      = 0.0f;
-        fv.npc.speed          = 0.0f;
-        fv.npc.walkCycleTime  = 0.0f;
-        fv.npc.gender         = NPCShared::FEMALE;
-        fv.npc.clothingColor  = apronBlue;
-        fv.isCoffeeBarista    = true;
-        g_vendors.push_back(fv);
+    int seeded = std::min((int)g_customers.size(), std::max(8, (int)g_stallAnchors.size()));
+    for (int i = 0; i < seeded; ++i) {
+        assignCustomerToQueue(i);
     }
+}
+
+inline void moveCustomerTowards(FoodCourtCustomer& c, float deltaTime, float stopDistance = 0.12f) {
+    glm::vec3 dir = c.npc.targetPosition - c.npc.position;
+    dir.y = 0.0f;
+    float dist = glm::length(dir);
+    if (dist <= stopDistance) return;
+
+    glm::vec3 n = dir / dist;
+    float step = c.npc.speed * deltaTime;
+    if (step > dist) step = dist;
+    c.npc.position += n * step;
+    c.npc.rotationY = glm::degrees(std::atan2(n.x, n.z));
 }
 
 inline void updateFoodCourtVendors(float deltaTime) {
@@ -527,18 +734,102 @@ inline void updateFoodCourtVendors(float deltaTime) {
         fv.npc.walkCycleTime += deltaTime * 4.5f;
 }
 
+inline void updateFoodCourtCustomers(float deltaTime,
+                                     float floorY,
+                                     float worldCenterX,
+                                     float worldCenterZ,
+                                     float roomHalfW,
+                                     float roomHalfD) {
+    for (int i = 0; i < (int)g_customers.size(); ++i) {
+        FoodCourtCustomer& c = g_customers[i];
+
+        if (c.state == FoodCourtCustomer::State::QUEUING) {
+            c.npc.walkCycleTime += deltaTime * 1.5f;
+        } else {
+            c.npc.walkCycleTime += deltaTime * 4.0f;
+        }
+
+        if (c.state == FoodCourtCustomer::State::WALKING) {
+            moveCustomerTowards(c, deltaTime);
+            glm::vec3 toTarget = c.npc.targetPosition - c.npc.position;
+            toTarget.y = 0.0f;
+            if (glm::length(toTarget) <= 0.12f) {
+                if ((std::rand() % 100) < 42 && assignCustomerToQueue(i)) {
+                    // Customer enters a queue line.
+                } else {
+                    c.npc.targetPosition = randomFoodCourtWalkTarget(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD);
+                }
+            }
+            continue;
+        }
+
+        if (c.state == FoodCourtCustomer::State::GOING_TO_QUEUE) {
+            if (c.queueSpotIndex < 0 || c.queueSpotIndex >= (int)g_queueSpots.size()) {
+                c.state = FoodCourtCustomer::State::WALKING;
+                c.npc.targetPosition = randomFoodCourtWalkTarget(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD);
+                continue;
+            }
+
+            c.npc.targetPosition = g_queueSpots[c.queueSpotIndex].position;
+            moveCustomerTowards(c, deltaTime, 0.08f);
+            glm::vec3 d = c.npc.targetPosition - c.npc.position;
+            d.y = 0.0f;
+            if (glm::length(d) <= 0.08f) {
+                c.state = FoodCourtCustomer::State::QUEUING;
+                c.stateTimer = randRange(4.0f, 9.0f);
+                c.npc.rotationY = g_queueSpots[c.queueSpotIndex].facingYaw;
+            }
+            continue;
+        }
+
+        if (c.queueSpotIndex >= 0 && c.queueSpotIndex < (int)g_queueSpots.size()) {
+            c.npc.targetPosition = g_queueSpots[c.queueSpotIndex].position;
+            c.npc.rotationY = g_queueSpots[c.queueSpotIndex].facingYaw;
+            c.npc.position.y = floorY;
+        }
+
+        c.stateTimer -= deltaTime;
+        if (c.stateTimer <= 0.0f) {
+            int spotIdx = c.queueSpotIndex;
+            if (spotIdx >= 0 && spotIdx < (int)g_queueSpots.size()) {
+                int stallIdx = g_queueSpots[spotIdx].stallIndex;
+                g_queueOccupancy[spotIdx] = -1;
+                compactQueueForStall(stallIdx);
+            }
+
+            c.queueSpotIndex = -1;
+            c.state = FoodCourtCustomer::State::WALKING;
+            c.npc.targetPosition = randomFoodCourtWalkTarget(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD);
+        }
+    }
+}
+
 inline void drawFoodCourtVendors() {
     RenderContext& c = ctx();
     if (!c.shader || c.cubeVAO == 0 || c.cylVAO == 0 || c.sphereVAO == 0) return;
 
     NPCShared::DrawParams params;
-    params.selling           = true;
-    params.sitting           = false;
+    params.selling = true;
+    params.sitting = false;
     params.enableCameraFlash = false;
 
     for (auto& fv : g_vendors)
         NPCShared::drawNPC(*c.shader, c.cubeVAO, c.cylVAO, c.sphereVAO,
                            c.sphereCount, fv.npc, params, c.cylSegments);
+}
+
+inline void drawFoodCourtCustomers() {
+    RenderContext& c = ctx();
+    if (!c.shader || c.cubeVAO == 0 || c.cylVAO == 0 || c.sphereVAO == 0) return;
+
+    NPCShared::DrawParams params;
+    params.selling = false;
+    params.sitting = false;
+    params.enableCameraFlash = false;
+
+    for (auto& customer : g_customers)
+        NPCShared::drawNPC(*c.shader, c.cubeVAO, c.cylVAO, c.sphereVAO,
+                           c.sphereCount, customer.npc, params, c.cylSegments);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -571,29 +862,12 @@ inline void drawLargeRestaurants(float floorY, Shader& gouraudShader,
         restoIdx++;
     };
 
-    float spacingX = 18.0f; // restaurants are 16m wide, so 18m spacing
-    float spacingZ = 20.0f; 
-
-    // Left Wall (-X) facing right
-    float wxL = worldCenterX - roomHalfW + 1.0f;
-    for (float z = worldCenterZ - roomHalfD + 12.0f; z <= worldCenterZ + roomHalfD - 12.0f; z += spacingZ) {
-        glm::mat4 m = glm::translate(glm::mat4(1.0f), glm::vec3(wxL, floorY, z));
-        m = glm::rotate(m, glm::radians(90.0f), glm::vec3(0,1,0));
-        drawStall(m);
-    }
-    
-    // Right Wall (+X) facing left
-    float wxR = worldCenterX + roomHalfW - 1.0f;
-    for (float z = worldCenterZ - roomHalfD + 12.0f; z <= worldCenterZ + roomHalfD - 12.0f; z += spacingZ) {
-        glm::mat4 m = glm::translate(glm::mat4(1.0f), glm::vec3(wxR, floorY, z));
-        m = glm::rotate(m, glm::radians(-90.0f), glm::vec3(0,1,0));
-        drawStall(m);
-    }
-    
-    // Back Wall (-Z) facing forward
-    float backZ = worldCenterZ - roomHalfD + 1.2f;
-    for (float x = worldCenterX - roomHalfW + 24.0f; x <= worldCenterX + roomHalfW - 24.0f; x += spacingX) {
-        glm::mat4 m = glm::translate(glm::mat4(1.0f), glm::vec3(x, floorY, backZ));
+    collectRestaurantStallAnchors(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD, g_stallAnchors);
+    for (const StallAnchor& anchor : g_stallAnchors) {
+        glm::mat4 m = glm::translate(glm::mat4(1.0f), anchor.origin);
+        if (std::abs(anchor.yawDeg) > 0.01f) {
+            m = glm::rotate(m, glm::radians(anchor.yawDeg), glm::vec3(0, 1, 0));
+        }
         drawStall(m);
     }
     
@@ -693,8 +967,21 @@ inline void drawThirdFloor(float floorY,
     RenderContext& c = ctx();
     if (c.shader) c.shader->use();
 
+    if (g_queueSpots.empty()) {
+        initQueueSpotsFromStalls();
+    }
+    initFoodCourtVendors(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD);
+    initFoodCourtCustomers(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD);
+
+    updateFoodCourtVendors(deltaTime);
+    updateFoodCourtCustomers(deltaTime, floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD);
+
     // 2. Fancy circular seating in central area
     drawSeatingArea(floorY, worldCenterX, worldCenterZ, roomHalfW, roomHalfD, 6, 8, 6.0f, 6.0f);
+
+    // 3. Animated salesmen in each stall and walking/queued customers.
+    drawFoodCourtVendors();
+    drawFoodCourtCustomers();
 }
 
 } // namespace ThirdFloorDesign
