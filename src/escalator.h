@@ -141,18 +141,28 @@ inline void updateRide(BasicCamera& camera, float deltaTime,
 }
 
 inline void draw(Shader& shader, unsigned int cubeVAO, unsigned int quadVAO, unsigned int billboardVAO,
-                 unsigned int texBillboardAd,
+                 unsigned int texBillboardAd, unsigned int texGrass,
                  float floorToFloorHeight, float lotWidth, float lotDepth, float wallThickness) {
     Layout l = computeLayout(floorToFloorHeight, lotWidth, lotDepth, wallThickness);
 
     shader.setInt("useTexture", 0);
 
-    // 1) Green terrain
+    // 1) Green terrain (grass texture if available)
     glm::mat4 terrainModel = glm::mat4(1.0f);
     terrainModel = glm::translate(terrainModel, glm::vec3(lotWidth + 20.0f, -0.06f, lotDepth * 0.84f));
     terrainModel = glm::scale(terrainModel, glm::vec3(56.0f, 1.0f, 50.0f));
-    drawQuad(shader, quadVAO, terrainModel,
-             glm::vec3(0.18f, 0.64f, 0.23f), 0, 0.25f, 0.75f, 0.08f, 6.0f);
+    if (texGrass != 0) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texGrass);
+        shader.setInt("texture1", 0);
+        shader.setInt("useTexture", 1);
+        drawQuad(shader, quadVAO, terrainModel,
+                 glm::vec3(0.18f, 0.64f, 0.23f), 8, 0.25f, 0.75f, 0.08f, 6.0f);
+        shader.setInt("useTexture", 0);
+    } else {
+        drawQuad(shader, quadVAO, terrainModel,
+                 glm::vec3(0.18f, 0.64f, 0.23f), 0, 0.25f, 0.75f, 0.08f, 6.0f);
+    }
 
     // 2) Pedestrian path in front of escalator
     float pathLen = l.pathStartX - l.baseX;

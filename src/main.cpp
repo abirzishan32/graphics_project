@@ -136,6 +136,7 @@ unsigned int texInterstellarBillboard = 0; // interstellar movie
 unsigned int texWashroom = 0;              // washroom icon
 unsigned int texWooden = 0;                // wooden texture for chairs and tables
 unsigned int texFirstFloor = 0;            // dedicated texture for first-floor surrounding slab
+unsigned int texGrass = 0;                 // outdoor grass texture
 
 Shader* gFancyWindowShader = nullptr;
 unsigned int gFancyWindowCubeVAO = 0;
@@ -416,6 +417,7 @@ int main()
     texSofa = loadTexture("src/sofa.jpg");
     texWooden = loadTexture("src/wooden.jpeg");
     texFirstFloor = loadTexture("src/1st-floor.jpg");
+    texGrass = loadTexture("src/grass.jpg");
 
     // Load and specific wrap params for Restaurant Logos
     const char* restoFiles[4] = {
@@ -2421,7 +2423,16 @@ void drawOutdoorEnvironment(Shader& shader, unsigned int cubeVAO, unsigned int q
     glm::mat4 groundModel = glm::mat4(1.0f);
     groundModel = glm::translate(groundModel, glm::vec3(LOT_WIDTH/2, -0.05f, LOT_DEPTH + 50.0f));
     groundModel = glm::scale(groundModel, glm::vec3(150.0f, 1.0f, 120.0f));
-    drawQuad(shader, quadVAO, groundModel, grassColor, 0, 0.2f, 0.7f, 0.1f, 4.0f);
+    if (texGrass != 0) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texGrass);
+        shader.setInt("texture1", 0);
+        shader.setInt("useTexture", 1);
+        drawQuad(shader, quadVAO, groundModel, grassColor, 8, 0.2f, 0.7f, 0.1f, 4.0f);
+        shader.setInt("useTexture", 0);
+    } else {
+        drawQuad(shader, quadVAO, groundModel, grassColor, 0, 0.2f, 0.7f, 0.1f, 4.0f);
+    }
     
     // === ROAD in front of parking lot entrance ===
     glm::vec3 asphaltColor(0.18f, 0.18f, 0.2f);
@@ -2874,7 +2885,7 @@ void drawScene(Shader& shader, Shader& gouraudShader, unsigned int cubeVAO, unsi
 
     // Draw right-side outdoor escalator access section
     EscalatorSystem::draw(shader, cubeVAO, quadVAO, escalatorBillboardVAO,
-                          texAarongBillboard,
+                          texAarongBillboard, texGrass,
                           FLOOR_TO_FLOOR_HEIGHT, LOT_WIDTH, LOT_DEPTH, WALL_THICKNESS);
     // Note: drawCurvedBarrier is called separately from main() because it needs curvedBarrierVAO
 }
