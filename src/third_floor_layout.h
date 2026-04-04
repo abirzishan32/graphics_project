@@ -247,8 +247,86 @@ inline unsigned int createLargeRestaurantVAO(int& outCount) {
     
     // 1. Back Wall & Floor/Ceiling bounds
     pushBox11(v, {0, h/2, -hd + wt/2}, {hw, h/2, wt/2}, c_wall); // Back wall
-    pushBox11(v, {-hw + wt/2, h/2, 0}, {wt/2, h/2, hd}, c_divider); // Left Divider Wall
-    pushBox11(v, {hw - wt/2, h/2, 0}, {wt/2, h/2, hd}, c_divider); // Right Divider Wall
+    
+    auto addCurvedPartition = [&](glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float height, float thick, glm::vec3 color) {
+        int segments = 30;
+        std::vector<glm::vec3> ptsRaw(segments + 1);
+        std::vector<glm::vec3> nRaw(segments + 1);
+        for(int i = 0; i <= segments; ++i) {
+            float t = (float)i / segments;
+            float tm1 = 1.0f - t;
+            ptsRaw[i] = tm1*tm1*tm1*p0 + 3.0f*tm1*tm1*t*p1 + 3.0f*tm1*t*t*p2 + t*t*t*p3;
+            glm::vec3 d = 3.0f*tm1*tm1*(p1-p0) + 6.0f*tm1*t*(p2-p1) + 3.0f*t*t*(p3-p2);
+            // Normal in XZ plane (rotate tangent by 90 degrees)
+            nRaw[i] = glm::normalize(glm::vec3(-d.z, 0.0f, d.x));
+        }
+        
+        float dist = 0.0f; // Calculate approximate distance for U mapping
+        for(int i = 0; i < segments; ++i) {
+            glm::vec3 b0 = ptsRaw[i];
+            glm::vec3 b1 = ptsRaw[i+1];
+            glm::vec3 t0 = b0 + glm::vec3(0, height, 0);
+            glm::vec3 t1 = b1 + glm::vec3(0, height, 0);
+            
+            // Outer wall
+            glm::vec3 bo0 = b0 + nRaw[i] * thick;
+            glm::vec3 bo1 = b1 + nRaw[i+1] * thick;
+            glm::vec3 to0 = bo0 + glm::vec3(0, height, 0);
+            glm::vec3 to1 = bo1 + glm::vec3(0, height, 0);
+            
+            float u0 = dist;
+            dist += glm::length(b1 - b0) * 0.2f; // scale texture repeats
+            float u1 = dist;
+            
+            glm::vec3 nAvg = glm::normalize(nRaw[i] + nRaw[i+1]);
+            
+            // Inner face 
+            pushQuad11(v, b0, b1, t1, t0, nAvg, {u0, 0}, {u1, 0}, {u1, 1}, {u0, 1}, color);
+            // Outer face
+            pushQuad11(v, bo1, bo0, to0, to1, -nAvg, {u1, 0}, {u0, 0}, {u0, 1}, {u1, 1}, color);
+            
+            // End Caps
+            if (i == 0) {
+                glm::vec3 nBack = glm::normalize(glm::vec3(b0.x - bo0.x, 0, b0.z - bo0.z));
+                pushQuad11(v, bo0, b0, t0, to0, nBack, {0,0}, {1,0}, {1,1}, {0,1}, color);
+            }
+            if (i == segments - 1) {
+                glm::vec3 nFront = glm::normalize(glm::vec3(b1.x - bo1.x, 0, b1.z - bo1.z));
+                pushQuad11(v, b1, bo1, to1, t1, nFront, {0,0}, {1,0}, {1,1}, {0,1}, color);
+            }
+            
+            // Top Cap 
+            pushQuad11(v, t0, t1, to1, to0, {0,1,0}, {0,0}, {1,0}, {1,1}, {0,1}, color);
+        }
+    };
+
+    glm::vec3 c_acrylic(0.85f, 0.90f, 0.95f); // Frosted Acrylic Material
+
+    // Left curved sweep
+    glm::vec3 l_start(-hw + wt, 0, -hd);
+    glm::vec3 l_c1(-hw - 2.5f, 0, -hd * 0.3f);
+    glm::vec3 l_c2(-hw + 3.0f, 0, hd * 0.3f);
+    glm::vec3 l_end(-hw + 1.0f, 0, hd);
+    addCurvedPartition(l_start, l_c1, l_c2, l_end, h, wt, c_acrylic);
+
+    // Right curved sweep (mirrored across X)
+    glm::vec3 r_start(hw - wt, 0, -hd);
+    glm::vec3 r_c1(hw + 2.5f, 0, -hd * 0.3f);
+    glm::vec3 r_c2(hw - 3.0f, 0, hd * 0.3f);
+    glm::vec3 r_end(hw - 1.0f, 0, hd);
+    
+    // For the right wall, we swap the order of the inner/outer faces through normal logic
+    // by reversing the control points or just drawing it! Normal is generated in +X direction if drawn from back to front.
+    // Left: d.z is positive. d.x is mostly 0 to start. (-d.z, 0, d.x) points -X initially. Wait.
+    // If we draw from Z=-hd to Z=+hd, d.z > 0.
+    // (-d.z, 0, d.x) implies (-val, 0, d.x). This points -X (leftwards).
+    // For right side, d.z > 0. We want normal to point +X (rightwards).
+    // We can just negate the normal inside addCurvedPartition by passing a flip flag or just let it be thick! It's a thick wall so it has both an inner and outer wall regardless! Wait, it has both faces because it's double-sided. So flipping isn't strictly necessary visually as long as normals point outwards from the thickness. But my inner/outer assignment `bo0 = b0 + nRaw * thick` depends on `nRaw`.
+    // If `bo0` is always to the left (-X), then for the right wall, the thickness goes INWARD into the stall! We want it to go OUTWARD.
+    // Actually letting the Right wall go inwards is mostly fine, we just adjust the start point to be `hw` instead of `hw-wt`.
+    // Let's use `hw` so `bo` goes into `hw - wt`
+    addCurvedPartition(glm::vec3(hw, 0, -hd), glm::vec3(hw + 2.5f, 0, -hd * 0.3f), glm::vec3(hw - 3.0f, 0, hd * 0.3f), glm::vec3(hw - 1.0f, 0, hd), h, -wt, c_acrylic);
+
     
     // 2. The Massive Serving Desk spanning the storefront!
     float deskZ = hd - 2.0f;  // Front edge
