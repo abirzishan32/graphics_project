@@ -127,7 +127,6 @@ const char* BASE_WINDOW_TITLE = "Shoppning Mall";
 unsigned int texElevatorPanelBase = 0;     // wood-like base texture
 unsigned int texSofa = 0;                  // sofa texture for cinema
 unsigned int texRestaurantLogos[4] = {0};   // restaurant logos for 3rd floor
-unsigned int texElevatorButtons = 0;       // button overlay texture
 unsigned int texSevenSegment[10] = {0};    // 0..9 LED digit textures
 unsigned int escalatorBillboardVAO = 0;
 unsigned int texAarongBillboard = 0;
@@ -337,6 +336,42 @@ struct Elevator {
 
 Elevator elevator;
 bool elevatorFloorKeyPressed[6] = {false, false, false, false, false, false};
+bool elevatorGroundAliasKeyPressed = false;
+bool elevatorButtonLit[4] = {false, false, false, false}; // G,1,2,3 (bottom to top)
+float elevatorButtonLitTimer[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+void markElevatorButtonPressed(int floor)
+{
+    if (floor < 0 || floor > 3) return;
+    elevatorButtonLit[floor] = true;
+    // Fallback timeout in case destination reset condition is delayed.
+    elevatorButtonLitTimer[floor] = 6.0f;
+}
+
+void updateElevatorButtons(float dt)
+{
+    for (int floor = 0; floor <= 3; ++floor) {
+        if (!elevatorButtonLit[floor]) continue;
+
+        bool reachedDestination =
+            (elevator.currentFloor == floor) &&
+            (elevator.state == Elevator::State::DOORS_OPEN ||
+             elevator.state == Elevator::State::DOORS_OPENING ||
+             elevator.state == Elevator::State::IDLE);
+
+        if (reachedDestination) {
+            elevatorButtonLit[floor] = false;
+            elevatorButtonLitTimer[floor] = 0.0f;
+            continue;
+        }
+
+        elevatorButtonLitTimer[floor] -= dt;
+        if (elevatorButtonLitTimer[floor] <= 0.0f) {
+            elevatorButtonLit[floor] = false;
+            elevatorButtonLitTimer[floor] = 0.0f;
+        }
+    }
+}
 
 // Manually define missing GLAD function pointers to fix linker errors
 PFNGLACTIVETEXTUREPROC glad_glActiveTexture = nullptr;
@@ -404,7 +439,6 @@ int main()
     unsigned int texBrick     = loadTexture("brick-wall.jpg");
     unsigned int texContainer = loadTexture("container.jpg");
     texElevatorPanelBase = loadTexture("container.jpg");
-    texElevatorButtons   = loadTexture("elevator-buttons.png");
     texAarongBillboard   = loadTexture("src/advertisements/aarong.jpeg");
     texClockworkBillboard = loadTexture("src/rfad.jpeg");
     texInterstellarBillboard = loadTexture("src/intersteller.jpg");
@@ -446,6 +480,7 @@ int main()
         processInput(window);
         EscalatorSystem::updateRide(camera, deltaTime, FLOOR_TO_FLOOR_HEIGHT, LOT_WIDTH, LOT_DEPTH, WALL_THICKNESS);
         elevator.update(deltaTime, camera);
+        updateElevatorButtons(deltaTime);
         
         // Update second floor NPC animations and AI behaviors
         SecondFloorDesign::updateNPCs(deltaTime, 2.0f * FLOOR_TO_FLOOR_HEIGHT);
@@ -603,6 +638,22 @@ void processInput(GLFWwindow *window)
         spaceKeyPressed = false;
     }
 
+    // G key alias for Ground floor (same as key 0).
+    if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) {
+        if (!elevatorGroundAliasKeyPressed) {
+            if (insideElevatorForInput) {
+                elevator.requestFloor(0);
+                markElevatorButtonPressed(0);
+            } else if (outsideElevatorForInput) {
+                elevator.requestFromOutside(0);
+                markElevatorButtonPressed(0);
+            }
+            elevatorGroundAliasKeyPressed = true;
+        }
+    } else {
+        elevatorGroundAliasKeyPressed = false;
+    }
+
     // Elevator floor buttons: 0=G, 1..5 = upper floors
     for (int floor = 0; floor <= TOP_FLOOR_INDEX; ++floor) {
         int key = (floor == 0) ? GLFW_KEY_0 : (GLFW_KEY_1 + floor - 1);
@@ -610,8 +661,10 @@ void processInput(GLFWwindow *window)
             if (!elevatorFloorKeyPressed[floor]) {
                 if (insideElevatorForInput) {
                     elevator.requestFloor(floor);
+                    markElevatorButtonPressed(floor);
                 } else if (outsideElevatorForInput) {
                     elevator.requestFromOutside(floor);
+                    markElevatorButtonPressed(floor);
                 } else {
                     if (floor == 1) {
                         entranceLightsOn = !entranceLightsOn;
@@ -1668,6 +1721,11 @@ void drawStackedEmptyFloors(Shader& shader, Shader& gouraudShader, unsigned int 
 void drawElevatorSystem(Shader& shader, unsigned int cubeVAO)
 {
     shader.setInt("useTexture", 0);
+    static unsigned int buttonCylinderVAO = 0;
+    static const int buttonSegments = 24;
+    if (buttonCylinderVAO == 0) {
+        buttonCylinderVAO = createCylinderVAO(buttonSegments);
+    }
 
     float shaftHeight = EXTRA_FLOORS * FLOOR_TO_FLOOR_HEIGHT + CEILING_HEIGHT;
     float shaftWallY = shaftHeight * 0.5f;
@@ -1782,23 +1840,45 @@ void drawElevatorSystem(Shader& shader, unsigned int cubeVAO)
     float innerDoorZ = elevator.shaftCenter.z + elevator.cabinDepth * 0.5f - wallThickness;
     float outerDoorZ = elevator.shaftCenter.z + elevator.shaftDepth * 0.5f + wallThickness * 0.8f;
 
-    // Button panel with texture mapping: wood base + elevator button overlay
-    if (glad_glActiveTexture) {
-        glad_glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texElevatorPanelBase);
-        glad_glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, texElevatorButtons);
-    }
-    shader.setInt("texture1", 0);
-    shader.setInt("texture2", 1);
-    shader.setInt("useTexture", 4);
-
+    // Procedural elevator button panel (no 2D button texture overlay).
+    shader.setInt("useTexture", 0);
     glm::vec3 panelPos(elevator.shaftCenter.x + elevator.cabinWidth * 0.5f - 0.09f,
                        cabinY,
                        elevator.shaftCenter.z - 0.25f);
+    glm::vec3 panelBaseColor(0.55f, 0.56f, 0.58f);
     drawCube(shader, cubeVAO, panelPos,
-             glm::vec3(0.035f, 1.35f, 0.48f),
-             glm::vec3(1.0f, 1.0f, 1.0f), 4, 0.12f, 0.72f, 0.3f, 24.0f);
+             glm::vec3(0.04f, 1.35f, 0.48f),
+             panelBaseColor, 3, 0.10f, 0.50f, 0.90f, 140.0f);
+
+    // Circular buttons: bottom->top = G,1,2,3
+    const float buttonX = panelPos.x - 0.03f;
+    const float baseY = cabinY - 0.43f;
+    const float stepY = 0.29f;
+    const float buttonRadius = 0.07f;
+    const float buttonDepth = 0.035f;
+
+    for (int floor = 0; floor <= 3; ++floor) {
+        glm::vec3 buttonPos(buttonX, baseY + floor * stepY, panelPos.z);
+        glm::vec3 rimColor(0.74f, 0.75f, 0.78f);
+        glm::vec3 defaultCore(0.82f, 0.83f, 0.85f);
+        glm::vec3 activeCore(0.25f, 1.00f, 0.35f);
+        glm::vec3 coreColor = elevatorButtonLit[floor] ? activeCore : defaultCore;
+
+        // Metallic rim
+        drawCylinder(shader, buttonCylinderVAO, buttonSegments, buttonPos,
+                     glm::vec3(buttonRadius, buttonDepth, buttonRadius),
+                     rimColor, 3, 0.10f, 0.45f, 0.95f, 160.0f);
+
+        // Lit/dull center cap
+        drawCylinder(shader, buttonCylinderVAO, buttonSegments,
+                     buttonPos + glm::vec3(-buttonDepth * 0.35f, 0.0f, 0.0f),
+                     glm::vec3(buttonRadius * 0.70f, buttonDepth * 0.55f, buttonRadius * 0.70f),
+                     coreColor, elevatorButtonLit[floor] ? 1 : 0,
+                     elevatorButtonLit[floor] ? 0.85f : 0.14f,
+                     elevatorButtonLit[floor] ? 0.35f : 0.60f,
+                     elevatorButtonLit[floor] ? 0.20f : 0.40f,
+                     elevatorButtonLit[floor] ? 10.0f : 42.0f);
+    }
 
     // LED 7-segment display: texture mapped from src/seven-segments/<digit>.png
     int displayDigit = elevator.targetFloor;
